@@ -8,7 +8,7 @@ export default function InvoiceTab({ klanten, werkbonnen }) {
   const [generated, setGenerated] = useState(false);
 
   const lines = werkbonnen.filter(w => w.klant === klant && w.status === 'approved');
-  const subtotal = lines.reduce((s, l) => s + l.hours * (l.rate || 85), 0);
+  const subtotal = lines.reduce((s, l) => s + (l.bon ?? l.hours ?? 0) * (l.rate || 85), 0);
   const vat = subtotal * 0.21;
   const grand = subtotal + vat;
 
@@ -83,9 +83,9 @@ export default function InvoiceTab({ klanten, werkbonnen }) {
                   <td className="py-1">{l.date}</td>
                   <td>{l.worker}</td>
                   <td>{l.machine}</td>
-                  <td className="text-right">{l.hours.toFixed(1)}</td>
+                  <td className="text-right">{(l.bon ?? l.hours ?? 0).toFixed(1)}</td>
                   <td className="text-right">€ {fmt(l.rate || 85)}</td>
-                  <td className="text-right">€ {fmt(l.hours * (l.rate || 85))}</td>
+                  <td className="text-right">€ {fmt((l.bon ?? l.hours ?? 0) * (l.rate || 85))}</td>
                 </tr>
               ))}
             </tbody>

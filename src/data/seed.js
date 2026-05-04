@@ -18,17 +18,18 @@ export const seedWerven = [
   { id: 'besix', klant: 'BESIX', address: 'Winterdijk', status: 'open' },
   { id: 'kest', klant: 'KESTELEYN Charles', address: 'Gent', status: 'open' },
   { id: 'aswebo-r', klant: 'ASWEBO ROESELARE', address: 'Roeselare', status: 'open' },
-  { id: 'hye', klant: 'HYE', address: 'Antwerpen', status: 'open' }
+  { id: 'hye', klant: 'HYE', address: 'Antwerpen', status: 'open' },
+  { id: 'jonck', klant: 'JONCKHEERE', address: 'Roeselare', status: 'open' }
 ];
 
 export const seedWorkers = [
   { id: 'w1', name: 'DEBRUYCKER', type: 'employee', function: 'Bestuurder', hireDate: '15/03/2018', uurloon1: 24.50, uurloon2: 36.75 },
   { id: 'w2', name: 'EECKLOO FREDERIK', type: 'employee', function: 'Bestuurder', hireDate: '01/06/2015', uurloon1: 26.00, uurloon2: 39.00 },
   { id: 'w3', name: 'INGELBRECHT BART', type: 'employee', function: 'Bestuurder', hireDate: '12/09/2011', uurloon1: 27.50, uurloon2: 41.25 },
-  { id: 'w4', name: 'DEMEULENAERE GINO', type: 'subcontractor', function: 'Bestuurder', hireDate: '20/01/2020', uurloon1: 0, uurloon2: 0 },
+  { id: 'w4', name: 'DEMEULENAERE GINO', type: 'subcontractor', function: 'Bestuurder', hireDate: '20/01/2020', uurloon1: 52.00, uurloon2: 65.00 },
   { id: 'w5', name: 'HEMZELF', type: 'employee', function: 'Arbeider', hireDate: '03/05/2019', uurloon1: 22.00, uurloon2: 33.00 },
   { id: 'w6', name: 'BOGAERT KRISTOF', type: 'employee', function: 'Bestuurder', hireDate: '07/11/2008', uurloon1: 28.75, uurloon2: 43.10 },
-  { id: 'w7', name: 'KIMPE MANUEL', type: 'subcontractor', function: 'Bestuurder', hireDate: '14/02/2022', uurloon1: 0, uurloon2: 0 },
+  { id: 'w7', name: 'KIMPE MANUEL', type: 'subcontractor', function: 'Bestuurder', hireDate: '14/02/2022', uurloon1: 48.50, uurloon2: 60.00 },
   { id: 'w8', name: 'OA HAECK JAN', type: 'employee', function: 'Chauffeur', hireDate: '22/08/2016', uurloon1: 23.50, uurloon2: 35.25 }
 ];
 
@@ -47,12 +48,49 @@ export const seedMachines = [
   { id: 'm12', code: 'MAN 8x8', group: 'Vrachtwagens', description: 'MAN 8x8 heavy haul truck', rate: 85, color: '#EC4899' }
 ];
 
-// A small history of approved werkbonnen so the invoice flow has data on day one.
+// Werkbon entries also serve as the Uurrooster source data.
+// fiche = internal/payroll hours, bon = billable hours to klant.
+// For subcontractor work, incomingInvoiceId tracks whether the OA has invoiced D&V yet.
 export const seedWerkbonnen = [
-  { id: 'wb-1001', nr: 431720, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '14/04/2026', hours: 8.5, rate: 85, status: 'approved' },
-  { id: 'wb-1002', nr: 431721, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '15/04/2026', hours: 8.0, rate: 85, status: 'approved' },
-  { id: 'wb-1003', nr: 431722, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat.Rups', date: '15/04/2026', hours: 7.5, rate: 75, status: 'approved' },
-  { id: 'wb-1004', nr: 431723, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat.Rups', date: '28/04/2026', hours: 8.0, rate: 75, status: 'approved' }
+  // AGRO ENERGIEK Zomergem — recurring work
+  { id: 'wb-1001', nr: 431720, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '14/04/2026', fiche: 8.5, bon: 8.5, rate: 95, status: 'approved', nota: '', incomingInvoiceId: null },
+  { id: 'wb-1002', nr: 431721, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '15/04/2026', fiche: 8.0, bon: 8.0, rate: 95, status: 'approved', nota: '', incomingInvoiceId: null },
+  { id: 'wb-1003', nr: 431722, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '15/04/2026', fiche: 7.5, bon: 7.5, rate: 70, status: 'approved', nota: 'TURF', incomingInvoiceId: null },
+  { id: 'wb-1004', nr: 431723, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '28/04/2026', fiche: 8.0, bon: 8.0, rate: 70, status: 'approved', nota: '', incomingInvoiceId: null },
+
+  // BESIX Winterdijk — heavy recurring schedule
+  { id: 'wb-1010', nr: 431730, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'ZX210.08 WD', date: '01/04/2026', fiche: 7.5, bon: 7.5, rate: 90, status: 'approved', nota: 'Vandammesluis Vo', incomingInvoiceId: null },
+  { id: 'wb-1011', nr: 431731, klant: 'BESIX', werf: 'Winterdijk', worker: 'KIMPE MANUEL', machine: 'ZX210.08 WD', date: '02/04/2026', fiche: 7.5, bon: 7.5, rate: 90, status: 'approved', nota: 'Vandammesluis Vo', incomingInvoiceId: 'oa-inv-001' },
+  { id: 'wb-1012', nr: 431732, klant: 'BESIX', werf: 'Winterdijk', worker: 'OA HAECK JAN', machine: 'cont', date: '02/04/2026', fiche: 2.25, bon: 6.0, rate: 75, status: 'approved', nota: 'Argex ophalen', incomingInvoiceId: null },
+  { id: 'wb-1013', nr: 431733, klant: 'BESIX', werf: 'Winterdijk', worker: 'KIMPE MANUEL', machine: 'ZX140.13 WD', date: '16/04/2026', fiche: 8.0, bon: 8.0, rate: 80, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+  { id: 'wb-1014', nr: 431734, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'ZX140.13 WD', date: '17/04/2026', fiche: 8.0, bon: 8.0, rate: 80, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+  { id: 'wb-1015', nr: 431735, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'MAN 8x8', date: '20/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+  { id: 'wb-1016', nr: 431736, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'MAN 8x8', date: '22/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+  { id: 'wb-1017', nr: 431737, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'MAN 8x8', date: '27/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+  { id: 'wb-1018', nr: 431738, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'MAN 8x8', date: '28/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: 'Winterdijk', incomingInvoiceId: null },
+
+  // ASWEBO Roeselare
+  { id: 'wb-1020', nr: 431740, klant: 'ASWEBO ROESELARE', werf: 'Roeselare', worker: 'INGELBRECHT BART', machine: 'Atlas L 23', date: '08/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: '', incomingInvoiceId: null },
+  { id: 'wb-1021', nr: 431741, klant: 'ASWEBO ROESELARE', werf: 'Roeselare', worker: 'INGELBRECHT BART', machine: 'Atlas L 23', date: '09/04/2026', fiche: 8.0, bon: 8.0, rate: 85, status: 'approved', nota: '', incomingInvoiceId: null },
+
+  // HYE — subcontractor (DEMEULENAERE GINO) — invoice missing!
+  { id: 'wb-1030', nr: 431750, klant: 'HYE', werf: 'Antwerpen', worker: 'DEMEULENAERE GINO', machine: 'LR 160.22', date: '06/04/2026', fiche: 8.5, bon: 8.5, rate: 110, status: 'approved', nota: 'kraan rups', incomingInvoiceId: null },
+  { id: 'wb-1031', nr: 431751, klant: 'HYE', werf: 'Antwerpen', worker: 'DEMEULENAERE GINO', machine: 'LR 160.22', date: '07/04/2026', fiche: 9.0, bon: 9.0, rate: 110, status: 'approved', nota: 'kraan rups', incomingInvoiceId: null },
+  { id: 'wb-1032', nr: 431752, klant: 'HYE', werf: 'Antwerpen', worker: 'DEMEULENAERE GINO', machine: 'LR 160.22', date: '08/04/2026', fiche: 8.0, bon: 8.0, rate: 110, status: 'approved', nota: '', incomingInvoiceId: null },
+
+  // KESTELEYN — DEMEULENAERE GINO again — earlier invoice already received
+  { id: 'wb-1040', nr: 431760, klant: 'KESTELEYN Charles', werf: 'Gent', worker: 'DEMEULENAERE GINO', machine: 'Sen 835.44', date: '03/04/2026', fiche: 8.0, bon: 8.0, rate: 95, status: 'approved', nota: 'Gent', incomingInvoiceId: 'oa-inv-002' },
+
+  // AVEVE AALTER
+  { id: 'wb-1050', nr: 431770, klant: 'AVEVE AALTER', werf: 'Aalter', worker: 'DEBRUYCKER', machine: 'Bobcat 3', date: '13/04/2026', fiche: 8.0, bon: 8.0, rate: 65, status: 'approved', nota: '', incomingInvoiceId: null },
+  { id: 'wb-1051', nr: 431771, klant: 'AVEVE AALTER', werf: 'Aalter', worker: 'INGELBRECHT BART', machine: 'Atlas L 23', date: '13/04/2026', fiche: 4.0, bon: 4.0, rate: 85, status: 'approved', nota: 'VM', incomingInvoiceId: null },
+  { id: 'wb-1052', nr: 431772, klant: 'JONCKHEERE', werf: 'Roeselare', worker: 'ingelbrecht bart', machine: 'Atlas L 23', date: '13/04/2026', fiche: 4.0, bon: 4.0, rate: 85, status: 'approved', nota: 'NM', incomingInvoiceId: null }
+];
+
+// Tracks subcontractor (OA) incoming invoices
+export const seedIncomingInvoices = [
+  { id: 'oa-inv-001', oaName: 'KIMPE MANUEL', invoiceNr: 'KM-2026-04-12', dateReceived: '15/04/2026', amount: 675.00, status: 'received' },
+  { id: 'oa-inv-002', oaName: 'DEMEULENAERE GINO', invoiceNr: 'DEG-26-074', dateReceived: '10/04/2026', amount: 760.00, status: 'paid' }
 ];
 
 export const machineGroups = ['Bandenkraan', 'Bandenlader', 'Bobcat', 'Borstelmachine', 'Dieplader', 'Dumper', 'Minigraafmachine', 'Rupskraan', 'Tractor', 'Vrachtwagens'];

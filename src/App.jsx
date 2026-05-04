@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen } from './data/seed.js';
+import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices } from './data/seed.js';
 import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
 import InvoiceTab from './components/InvoiceTab.jsx';
 import KlantenTab from './components/KlantenTab.jsx';
 import WerknemersTab from './components/WerknemersTab.jsx';
 import MachinesTab from './components/MachinesTab.jsx';
+import UurroosterTab from './components/UurroosterTab.jsx';
 import MobilePhone from './components/MobilePhone.jsx';
 import Toast from './components/Toast.jsx';
 
@@ -15,6 +16,7 @@ export default function App() {
   const [workers, setWorkers] = useState(seedWorkers);
   const [machines, setMachines] = useState(seedMachines);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
+  const [incomingInvoices] = useState(seedIncomingInvoices);
   const [tab, setTab] = useState('planning');
   const [toast, setToast] = useState(null);
   const [status, setStatus] = useState({ text: 'Ready', kind: 'info' });
@@ -30,7 +32,7 @@ export default function App() {
       if (w.id !== werfId) return w;
       let last = w.assignments[w.assignments.length - 1];
       if (!last || (last.workerId && last.machineId)) {
-        last = { id: 'a' + Date.now() + Math.random(), workerId: null, machineId: null };
+        last = { id: 'a' + Date.now() + Math.random(), workerId: null, machineId: null, half: 'full', hours: 8 };
         const next = { ...w, assignments: [...w.assignments, last] };
         if (kind === 'worker') last.workerId = id;
         if (kind === 'machine') last.machineId = id;
@@ -47,6 +49,37 @@ export default function App() {
     setWerven(prev => prev.map(w => ({ ...w, assignments: w.assignments.filter(a => a.id !== aid) })));
   }, []);
 
+  const handleSplit = useCallback((source, payload) => {
+    // source: { sourceWerfId, sourceAssignmentId, workerId, machineId }
+    // payload: { pmWerfId, amHours, pmHours, pmMachineId }
+    setWerven(prev => prev.map(w => {
+      // Mark source assignment as AM half with new hours
+      if (w.id === source.sourceWerfId) {
+        return {
+          ...w,
+          assignments: w.assignments.map(a =>
+            a.id === source.sourceAssignmentId
+              ? { ...a, half: 'am', hours: payload.amHours }
+              : a
+          )
+        };
+      }
+      // Add a new PM assignment to the chosen pm werf
+      if (w.id === payload.pmWerfId) {
+        const pmAssignment = {
+          id: 'a' + Date.now() + Math.random(),
+          workerId: source.workerId,
+          machineId: payload.pmMachineId,
+          half: 'pm',
+          hours: payload.pmHours
+        };
+        return { ...w, assignments: [...w.assignments, pmAssignment] };
+      }
+      return w;
+    }));
+    showToast('Werknemer gesplitst over 2 werven');
+  }, []);
+
   // Werkbonnen
   const handleApprove = (id) => {
     setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, status: 'approved' } : w));
@@ -57,6 +90,11 @@ export default function App() {
   const handleReject = (id) => {
     setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, status: 'rejected' } : w));
     showToast('Werkbon afgewezen', 'warn');
+  };
+
+  const handleWerkbonUpdate = (id, patch) => {
+    setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    showToast('Uren bijgewerkt');
   };
 
   // Klanten CRUD
@@ -121,7 +159,7 @@ export default function App() {
       setWerkbonnen(prev => [...prev, {
         id: 'wb-' + Date.now(), nr: newNr, klant: wb.klant, werf: wb.werf,
         worker: 'EECKLOO FREDERIK', machine: wb.machine,
-        date: '04/05/2026', hours: wb.hours, rate: 85, status: 'submitted'
+        date: '04/05/2026', fiche: wb.hours, bon: wb.hours, rate: 85, status: 'submitted', nota: wb.remarks || '', incomingInvoiceId: null
       }]);
       setMobile({ screen: 'submitted', currentWerkbon: null });
       setStatus({ text: 'Werkbon ingediend', kind: 'success' });
@@ -150,7 +188,7 @@ export default function App() {
         ? { ...w, assignments: [{ id: 'a-d2', workerId: 'w2', machineId: 'm3' }] } : w));
       setWerkbonnen(prev => prev.some(w => w.status === 'submitted')
         ? prev
-        : [...prev, { id: 'wb-demo', nr: 431728, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '04/05/2026', hours: 8.0, rate: 85, status: 'submitted' }]);
+        : [...prev, { id: 'wb-demo', nr: 431728, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '04/05/2026', fiche: 8.0, bon: 8.0, rate: 95, status: 'submitted', nota: '', incomingInvoiceId: null }]);
       setTab('inbox');
       setStatus({ text: '1 werkbon ter goedkeuring', kind: 'warn' });
     } else if (n === 4) {
@@ -212,6 +250,7 @@ export default function App() {
                 {[
                   { id: 'planning', label: 'Planning' },
                   { id: 'inbox', label: 'Werkbonnen', badge: submittedCount },
+                  { id: 'uurrooster', label: 'Uurrooster' },
                   { id: 'invoice', label: 'Facturen' },
                   { id: 'klanten', label: 'Klanten' },
                   { id: 'werknemers', label: 'Werknemers' },
@@ -237,11 +276,21 @@ export default function App() {
               {tab === 'planning' && (
                 <PlanningTab
                   werven={werven} workers={workers} machines={machines}
-                  onAssign={handleAssign} onRemove={handleRemove}
+                  onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
                 />
               )}
               {tab === 'inbox' && (
                 <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />
+              )}
+              {tab === 'uurrooster' && (
+                <UurroosterTab
+                  werkbonnen={werkbonnen}
+                  workers={workers}
+                  machines={machines}
+                  klanten={klanten}
+                  incomingInvoices={incomingInvoices}
+                  onUpdate={handleWerkbonUpdate}
+                />
               )}
               {tab === 'invoice' && (
                 <InvoiceTab klanten={klanten} werkbonnen={werkbonnen} />

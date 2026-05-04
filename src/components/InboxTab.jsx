@@ -21,7 +21,7 @@ export default function InboxTab({ werkbonnen, onApprove, onReject }) {
               <div className="text-[11px] text-slate-600 leading-relaxed">
                 <div><span className="text-slate-400">Klant:</span> {wb.klant} · {wb.werf}</div>
                 <div><span className="text-slate-400">Bestuurder:</span> {wb.worker} op {wb.machine}</div>
-                <div><span className="text-slate-400">Datum:</span> {wb.date} · {wb.hours} u</div>
+                <div><span className="text-slate-400">Datum:</span> {wb.date} · {wb.bon ?? wb.hours} u</div>
                 <div className="text-emerald-700 mt-1">✓ Klant getekend · ✓ Bestuurder getekend</div>
               </div>
               <div className="flex gap-2 mt-2">

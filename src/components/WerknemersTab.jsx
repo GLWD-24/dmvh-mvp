@@ -115,7 +115,7 @@ export default function WerknemersTab({ workers, onSave, onAdd, onDelete }) {
                   <TextInput value={draft.hireDate} onChange={v => update('hireDate', v)} placeholder="DD/MM/JJJJ" />
                 </FormField>
 
-                {!isSubcontractor && (
+                {!isSubcontractor ? (
                   <>
                     <FormField label="Uurloon 1 (regulier)">
                       <TextInput type="number" step="0.01" value={draft.uurloon1} onChange={v => update('uurloon1', v)} />
@@ -124,12 +124,18 @@ export default function WerknemersTab({ workers, onSave, onAdd, onDelete }) {
                       <TextInput type="number" step="0.01" value={draft.uurloon2} onChange={v => update('uurloon2', v)} />
                     </FormField>
                   </>
-                )}
-
-                {isSubcontractor && (
-                  <div className="col-span-2 bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-900">
-                    💡 Onderaannemers factureren zelf hun uren aan D&V. Volg openstaande facturen op via de module <strong>Onderaannemers</strong> (komende milestone M2).
-                  </div>
+                ) : (
+                  <>
+                    <FormField label="Uurtarief OA (€/u)">
+                      <TextInput type="number" step="0.01" value={draft.uurloon1} onChange={v => update('uurloon1', v)} />
+                    </FormField>
+                    <FormField label="Uurtarief overuren (€/u)">
+                      <TextInput type="number" step="0.01" value={draft.uurloon2} onChange={v => update('uurloon2', v)} />
+                    </FormField>
+                    <div className="col-span-2 bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-900">
+                      💡 Onderaannemers factureren zelf hun uren aan D&V op basis van dit tarief. Volg openstaande facturen op via de module <strong>Onderaannemers</strong> (komende milestone M2).
+                    </div>
+                  </>
                 )}
               </div>
 
