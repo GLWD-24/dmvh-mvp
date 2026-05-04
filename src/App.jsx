@@ -269,7 +269,13 @@ export default function App() {
       screen: 'werkbon',
       currentWerkbon: {
         klant: werf.klant, werf: werf.address, machine: machine?.code || '—',
-        hours: 8, remarks: '', opSign: false, clientSign: false
+        hours: 0,
+        phase: 'idle',
+        segments: [],
+        pauses: [],
+        remarks: '',
+        opSign: false,
+        clientSign: false
       }
     });
   };
