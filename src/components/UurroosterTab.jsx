@@ -105,8 +105,53 @@ export default function UurroosterTab({ werkbonnen, workers, machines, klanten, 
   const allWerven = [...new Set(werkbonnen.map(w => w.werf))].sort();
   const allKlanten = [...new Set(werkbonnen.map(w => w.klant))].sort();
 
+  // Find late werkbonnen (>1 day old, no signed bon)
+  const today = new Date(2026, 4, 4);
+  const lateWerkbonnen = werkbonnen.filter(wb => {
+    if (wb.signedUrl) return false;
+    if (wb.status === 'submitted' || wb.status === 'approved' || wb.status === 'invoiced' || wb.status === 'paid') return false;
+    const d = parseDate(wb.date);
+    if (!d) return false;
+    const daysSince = Math.floor((today - d) / 86400000);
+    return daysSince > 1;
+  });
+
+  const handleSendReminders = () => {
+    const grouped = {};
+    lateWerkbonnen.forEach(wb => {
+      if (!grouped[wb.worker]) grouped[wb.worker] = [];
+      grouped[wb.worker].push(wb);
+    });
+    const lines = Object.entries(grouped).map(([worker, bons]) =>
+      `📱 ${worker}: ${bons.length} ontbrekende bon${bons.length !== 1 ? 'nen' : ''}\n   ${bons.map(b => `${b.date} · ${b.werf}`).join('\n   ')}`
+    ).join('\n\n');
+    window.alert(
+      `WhatsApp herinneringen verstuurd:\n\n${lines}\n\n` +
+      `Bericht template:\n` +
+      `"Hoi! Vergeet je werkbon niet te tekenen voor [datum] op [werf]. ` +
+      `Open de DMVH app om dit nu af te ronden. Bedankt!"\n\n` +
+      `(Demo — in productie via WhatsApp Business API of Twilio)`
+    );
+  };
+
   return (
     <div className="flex flex-col h-full">
+      {lateWerkbonnen.length > 0 && (
+        <div className="bg-red-50 border-b-2 border-red-300 px-4 py-2 flex items-center gap-3">
+          <span className="text-red-600 text-lg">⚠</span>
+          <div className="flex-1 text-xs">
+            <span className="font-semibold text-red-900">{lateWerkbonnen.length} werkbon{lateWerkbonnen.length !== 1 ? 'nen' : ''} ontbreken</span>
+            <span className="text-red-700 ml-1">— meer dan 1 dag oud, nog niet ondertekend door operator</span>
+          </div>
+          <button
+            onClick={handleSendReminders}
+            className="text-[11px] px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700 whitespace-nowrap flex items-center gap-1"
+          >
+            <span>💬</span> WhatsApp herinneringen
+          </button>
+        </div>
+      )}
+
       {/* Header bar — matches USEIT2000 layout */}
       <div className="bg-white border-b border-slate-200 px-4 pt-3 pb-2">
         <div className="text-xs font-semibold text-blue-900 mb-2">Uurrooster</div>
@@ -388,6 +433,7 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
           <th className="text-left w-32">Machine</th>
           {showPrices && <th className="text-right w-16">Tarief</th>}
           {showPrices && <th className="text-right w-20">Bedrag</th>}
+          <th className="text-center w-20">Bon</th>
           <th className="text-left">Nota</th>
         </tr>
       </thead>
@@ -415,8 +461,28 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
                 <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle" style={{ backgroundColor: machineColor(wb.machine) }} />
                 {wb.machine}
               </td>
-              {showPrices && <td className={`text-right ${isHemzelf ? 'text-slate-400' : 'text-slate-500'}`}>€ {(wb.rate || 0).toFixed(0)}</td>}
-              {showPrices && <td className={`text-right font-medium ${isHemzelf ? 'text-slate-400' : ''}`}>€ {fmtEur((wb.bon || 0) * (wb.rate || 0))}</td>}
+              {showPrices && <td className={`text-right ${isHemzelf ? 'text-slate-400' : 'text-slate-500'}`}>
+                {isHemzelf ? (
+                  <span title="Werker-tarief €0 (HEMZELF) — machine-tarief in bedrag kolom">
+                    € 0 <span className="text-[9px] text-slate-400">+ M</span>
+                  </span>
+                ) : (
+                  <>€ {(wb.rate || 0).toFixed(0)}</>
+                )}
+              </td>}
+              {showPrices && <td className={`text-right font-medium ${isHemzelf ? 'text-blue-700' : ''}`}>
+                {isHemzelf ? (
+                  <span title="Naakte verhuur — alleen machine-tarief gefactureerd aan klant">
+                    € {fmtEur((wb.bon || 0) * (wb.rate || 0))}
+                    <span className="text-[9px] text-slate-400 ml-1">M</span>
+                  </span>
+                ) : (
+                  <>€ {fmtEur((wb.bon || 0) * (wb.rate || 0))}</>
+                )}
+              </td>}
+              <td className="text-center">
+                <BonCell wb={wb} />
+              </td>
               <td className="text-slate-500 truncate max-w-[140px]" title={wb.nota}>{wb.nota || ''}</td>
             </tr>
           );
@@ -432,9 +498,58 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
             {showPrices && <td></td>}
             {showPrices && <td className="text-right pr-2">€ {fmtEur(totalAmount || 0)}</td>}
             <td></td>
+            <td></td>
           </tr>
         </tfoot>
       )}
     </table>
+  );
+}
+
+// Bon status cell — green check (signed), amber clock (submitted), red warning (missing/late)
+function BonCell({ wb }) {
+  const status = wb.status || 'unknown';
+  const hasSignedUrl = wb.signedUrl;
+
+  // Determine display state
+  if (hasSignedUrl && (status === 'approved' || status === 'invoiced' || status === 'paid')) {
+    return (
+      <div className="flex items-center justify-center gap-1">
+        <span className="text-emerald-600" title="Bon ondertekend">✓</span>
+        <button
+          onClick={() => window.open(wb.signedUrl, '_blank', 'noopener,noreferrer')}
+          className="text-[10px] text-blue-700 underline hover:text-blue-900"
+        >
+          Bekijk
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'submitted') {
+    return (
+      <div className="flex items-center justify-center" title="Bon ingediend, wacht op goedkeuring">
+        <span className="text-amber-600">⏳</span>
+      </div>
+    );
+  }
+
+  // Check if bon is late (>1 day after werkbon date and still missing)
+  const today = new Date(2026, 4, 4); // mocked today
+  const wbDate = parseDate(wb.date);
+  if (wbDate) {
+    const daysSince = Math.floor((today - wbDate) / 86400000);
+    if (daysSince > 1 && (status === 'unknown' || !hasSignedUrl)) {
+      return (
+        <div className="flex items-center justify-center gap-1" title={`Bon ontbreekt sinds ${daysSince} dag${daysSince !== 1 ? 'en' : ''} — WhatsApp herinnering aan operator`}>
+          <span className="text-red-600 font-bold">⚠</span>
+          <span className="text-[9px] text-red-700">{daysSince}d</span>
+        </div>
+      );
+    }
+  }
+
+  return (
+    <div className="text-center text-slate-300" title="Geen bon">—</div>
   );
 }
