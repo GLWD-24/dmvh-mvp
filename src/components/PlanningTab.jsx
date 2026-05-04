@@ -18,7 +18,7 @@ const renderName = (workerName, half) => {
   return workerName;
 };
 
-export default function PlanningTab({ werven, workers, machines, onAssign, onRemove, onSplit, onDuplicate }) {
+export default function PlanningTab({ werven, workers, machines, onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment }) {
   const [splitDialog, setSplitDialog] = useState(null);
   const [currentDate, setCurrentDate] = useState(todayDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -218,6 +218,20 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                             >
                               ⊕
                             </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              const current = a.opmerking || '';
+                              const next = window.prompt('Opmerking (bv. GPS, palletvorken, locatie binnen werf):', current);
+                              if (next !== null) onUpdateAssignment(a.id, { opmerking: next.trim() });
+                            }}
+                            className={`ml-0.5 ${a.opmerking ? 'text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}
+                            title={a.opmerking ? `Opmerking: ${a.opmerking}` : 'Opmerking toevoegen'}
+                          >
+                            💬
+                          </button>
+                          {a.opmerking && (
+                            <span className="ml-1 text-[9px] text-slate-600 italic">{a.opmerking}</span>
                           )}
                           <button
                             onClick={() => onRemove(a.id)}
@@ -483,82 +497,186 @@ function SplitDialog({ dialog, werven, machines, onCancel, onConfirm }) {
   );
 }
 
-// Print view — clean A4 layout, only visible during print
+// Print view — A4 layout matching USEIT2000 planning document
 function PrintView({ date, werven, workers, machines }) {
+  // Group werven by klant
+  const klantenGroups = {};
+  werven.forEach(w => {
+    const klantName = w.klant || '—';
+    if (!klantenGroups[klantName]) klantenGroups[klantName] = [];
+    klantenGroups[klantName].push(w);
+  });
+  const sortedKlanten = Object.keys(klantenGroups).sort();
+
+  // Compute idle (unassigned) machines and workers
+  const assignedMachineIds = new Set();
+  const assignedWorkerIds = new Set();
+  werven.forEach(w => {
+    w.assignments.forEach(a => {
+      if (a.machineId) assignedMachineIds.add(a.machineId);
+      if (a.workerId && a.workerId !== 'HEMZELF') assignedWorkerIds.add(a.workerId);
+    });
+  });
+  const idleMachines = machines.filter(m => !assignedMachineIds.has(m.id));
+  const idleWorkers = workers.filter(w => !assignedWorkerIds.has(w.id));
+
+  // Group idle machines by their `group` field (Bandenkraan, Bobcat, etc.)
+  const idleMachinesByGroup = {};
+  idleMachines.forEach(m => {
+    if (!idleMachinesByGroup[m.group]) idleMachinesByGroup[m.group] = [];
+    idleMachinesByGroup[m.group].push(m);
+  });
+
+  // Format planning header date as DAG D/MM/YYYY (e.g. "DINSDAG 5/05/2026")
+  const headerDate = (() => {
+    const dayIdx = (date.getDay() + 6) % 7;
+    return `${DAYS_NL[dayIdx].toUpperCase()} ${date.getDate()}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+  })();
+  const printedOn = formatDate(new Date());
+
+  // Helper: render assignment in 3-column row format (werknemer | machine | opmerking)
+  const renderAssignment = (a) => {
+    const isHemzelf = a.workerId === 'HEMZELF';
+    const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
+    const mc = machines.find(x => x.id === a.machineId);
+    const half = a.half || 'full';
+    const isDup = a.instanceKey && a.instanceKey !== 'main';
+    const lowercaseName = half === 'pm';
+    return {
+      worker: isHemzelf
+        ? 'HEMZELF'
+        : wk
+          ? (lowercaseName ? wk.name.toLowerCase() : wk.name)
+          : '',
+      machine: mc?.code || '',
+      machineColor: mc?.color || '#3B82F6',
+      opmerking: a.opmerking || '',
+      isDup
+    };
+  };
+
   return (
-    <div className="print-only fixed inset-0 bg-white z-[9999] p-8 overflow-auto" style={{ display: 'none' }}>
+    <div className="print-only fixed inset-0 bg-white z-[9999] overflow-auto" style={{ display: 'none' }}>
       <style>{`
         @media print {
           body * { visibility: hidden; }
           .print-only, .print-only * { visibility: visible; }
           .print-only { display: block !important; position: absolute; top: 0; left: 0; width: 100%; }
-          @page { margin: 1.5cm; size: A4; }
+          @page { margin: 1cm; size: A4; }
+          .page-break { page-break-before: always; }
+          .avoid-break { page-break-inside: avoid; }
         }
         @media screen {
-          .print-only { display: block !important; }
+          .print-only { display: block !important; padding: 24px; }
         }
+        .useit-klant {
+          font-style: italic;
+          font-weight: 700;
+          color: #1e3a8a;
+          text-decoration: underline;
+          font-size: 12px;
+          padding-top: 8px;
+          padding-bottom: 2px;
+          border-bottom: 0.5px solid #cbd5e1;
+        }
+        .useit-row {
+          display: grid;
+          grid-template-columns: 32px 1fr 1fr 1fr;
+          font-size: 11px;
+          line-height: 1.4;
+          padding: 1px 0;
+        }
+        .useit-row .indent { width: 32px; }
+        .useit-machine { color: #1e40af; }
+        .useit-machine.colored { color: #b45309; }
       `}</style>
-      <div className="max-w-[180mm] mx-auto">
-        <div className="flex justify-between items-baseline border-b-2 border-slate-800 pb-2 mb-4">
-          <div>
-            <div className="text-xl font-bold">DEMAECKER &amp; VANHAECKE</div>
-            <div className="text-xs text-slate-600">Dorpweg 35, 8377 Zuienkerke · 050/31 63 27</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-slate-600">Dagplanning</div>
-            <div className="text-lg font-semibold">{formatDate(date)}</div>
-          </div>
+
+      <div className="max-w-[190mm] mx-auto" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+        {/* Blue header bar like USEIT */}
+        <div className="bg-blue-900 text-white flex items-center justify-between px-3 py-2 mb-1">
+          <span className="text-lg italic font-bold">Planning</span>
+          <span className="text-sm font-semibold tracking-wide">{headerDate}</span>
         </div>
 
-        {werven.filter(w => w.assignments.length > 0).map(w => (
-          <div key={w.id} className="mb-4 break-inside-avoid">
-            <div className="flex items-baseline gap-3 bg-slate-100 px-2 py-1 border-l-4 border-slate-800">
-              <span className="font-semibold text-sm">{w.klant}</span>
-              <span className="text-xs text-slate-600">{w.address}</span>
-            </div>
-            <table className="w-full text-xs mt-1 border-collapse">
-              <thead>
-                <tr className="text-slate-600 text-[10px] uppercase border-b border-slate-300">
-                  <th className="text-left py-1 w-12">Half</th>
-                  <th className="text-left">Werknemer</th>
-                  <th className="text-left">Machine</th>
-                  <th className="text-right w-16">Uren</th>
-                </tr>
-              </thead>
-              <tbody>
-                {w.assignments.map(a => {
-                  const isHemzelf = a.workerId === 'HEMZELF';
-                  const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
-                  const mc = machines.find(x => x.id === a.machineId);
-                  const half = a.half || 'full';
-                  const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : '';
-                  return (
-                    <tr key={a.id} className={`border-b border-slate-100 ${isHemzelf ? 'bg-slate-50' : ''}`}>
-                      <td className="py-1">{halfLabel}</td>
-                      <td className={half === 'pm' ? 'lowercase' : ''}>
-                        {isHemzelf ? <span className="italic text-slate-700">HEMZELF</span> : (wk ? renderName(wk.name, half) : '—')}
-                        {a.instanceKey && a.instanceKey !== 'main' && <span className="ml-1 text-[9px] text-purple-700">×2</span>}
-                        {isHemzelf && <span className="ml-1 text-[9px] text-slate-500">(naakt)</span>}
-                      </td>
-                      <td>{mc?.code || '—'}</td>
-                      <td className="text-right">{a.hours || 8} u</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ))}
+        {/* Klant + werven blocks */}
+        {sortedKlanten.map((klantName, ki) => {
+          const klantWerven = klantenGroups[klantName].filter(w => w.assignments.length > 0);
+          if (klantWerven.length === 0) return null;
 
-        {werven.filter(w => w.assignments.length === 0).length > 0 && (
-          <div className="mt-6 pt-3 border-t border-slate-300 text-xs text-slate-500">
-            <strong>Werven zonder toewijzing:</strong>{' '}
-            {werven.filter(w => w.assignments.length === 0).map(w => w.klant).join(' · ')}
+          // Each werf becomes a sub-header (or just the klant name if only 1 werf)
+          return (
+            <div key={ki} className="avoid-break">
+              {klantWerven.map((w, wi) => {
+                // Klant-name + werf description: "ARTES DEPRET Onderhoud patrimonium 543"
+                const headerLabel = w.omschrijving && w.omschrijving !== klantName
+                  ? `${klantName} ${w.omschrijving}`
+                  : klantName;
+                return (
+                  <div key={w.id}>
+                    <div className="useit-klant">{headerLabel}</div>
+                    {w.assignments.map(a => {
+                      const r = renderAssignment(a);
+                      return (
+                        <div key={a.id} className="useit-row">
+                          <div className="indent" />
+                          <div className={r.worker === 'HEMZELF' ? 'italic' : ''}>
+                            {r.worker}
+                            {r.isDup && <span className="text-[9px] text-purple-700 ml-1">×2</span>}
+                          </div>
+                          <div className={`useit-machine ${r.machineColor !== '#3B82F6' ? 'colored' : ''}`}>{r.machine}</div>
+                          <div className="text-slate-700">{r.opmerking}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* THUIS / BIJ HUURDE — werknemers niet ingezet */}
+        {idleWorkers.length > 0 && (
+          <div className="avoid-break mt-4">
+            <div className="useit-klant">THUIS</div>
+            <div className="useit-row" style={{ gridTemplateColumns: '32px 1fr', fontStyle: 'italic', color: '#475569' }}>
+              <div className="indent" />
+              <div>BIJ HUURDE</div>
+            </div>
+            {idleWorkers.map(w => (
+              <div key={w.id} className="useit-row" style={{ gridTemplateColumns: '32px 1fr' }}>
+                <div className="indent" />
+                <div>{w.name}{w.type === 'subcontractor' && <span className="text-[9px] ml-1 text-amber-700">OA</span>}</div>
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="mt-8 text-[10px] text-slate-400 text-center">
-          Afgedrukt op {formatDate(new Date())} · Demaecker &amp; Vanhaecke · USEIT2026
+        {/* Machines niet in gebruik — gegroepeerd per type */}
+        {idleMachines.length > 0 && (
+          <div className="mt-4 avoid-break">
+            <div className="bg-slate-700 text-white text-xs italic font-semibold px-2 py-1 inline-block">
+              Machines niet in gebruik
+            </div>
+            <div className="mt-1">
+              {Object.keys(idleMachinesByGroup).sort().map(group => (
+                <div key={group}>
+                  {idleMachinesByGroup[group].map((m, i) => (
+                    <div key={m.id} className="useit-row" style={{ gridTemplateColumns: '120px 1fr' }}>
+                      <div className="text-slate-700">{i === 0 ? group : ''}</div>
+                      <div className="useit-machine">{m.code}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="mt-8 pt-2 border-t border-slate-400 flex justify-between text-[10px] text-slate-700">
+          <span className="font-semibold">{printedOn}</span>
+          <span className="font-semibold">Pagina 1</span>
         </div>
       </div>
     </div>

@@ -12,14 +12,29 @@ export const seedKlanten = [
   { id: 'k8', name: 'JONCKHEERE', address: 'Spinnerijstraat 7, 8800 Roeselare', vat: 'BE 0405.117.299', terms: 30, contact: 'F. Jonckheere', phone: '051 23 45 67', email: 'info@jonckheere.be', mobile: '', fax: '', noPO: false }
 ];
 
+// Werven: klantId references seedKlanten.id. Werven represent specific projects/locations
+// per klant. A klant can have multiple werven (e.g. ARTES DEPRET has 2, D E C has 6).
+// `omschrijving` = optional project descriptor (e.g. "Onderhoud patrimonium 543",
+// "Zeebrugge kaaimuur boudewijnkanaal", "Antwerpen", "Brugge").
 export const seedWerven = [
-  { id: 'aveve', klant: 'AVEVE AALTER', address: 'Aalter', status: 'open' },
-  { id: 'agro', klant: 'AGRO ENERGIEK', address: 'Zomergem', status: 'open' },
-  { id: 'besix', klant: 'BESIX', address: 'Winterdijk', status: 'open' },
-  { id: 'kest', klant: 'KESTELEYN Charles', address: 'Gent', status: 'open' },
-  { id: 'aswebo-r', klant: 'ASWEBO ROESELARE', address: 'Roeselare', status: 'open' },
-  { id: 'hye', klant: 'HYE', address: 'Antwerpen', status: 'open' },
-  { id: 'jonck', klant: 'JONCKHEERE', address: 'Roeselare', status: 'open' }
+  // AVEVE AALTER
+  { id: 'aveve-1', klantId: 'k1', omschrijving: 'Aalter', address: 'Aalter', status: 'open', assignments: [] },
+  // AGRO ENERGIEK
+  { id: 'agro-1', klantId: 'k2', omschrijving: 'Zomergem', address: 'Zomergem', status: 'open', assignments: [] },
+  // BESIX
+  { id: 'besix-1', klantId: 'k3', omschrijving: 'Winterdijk', address: 'Winterdijk', status: 'open', assignments: [] },
+  // ASWEBO ROESELARE — multiple werven illustrated like real planning
+  { id: 'aswebo-r-1', klantId: 'k4', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', assignments: [] },
+  { id: 'aswebo-r-2', klantId: 'k4', omschrijving: 'Heist kaaimuur', address: 'Heist', status: 'open', assignments: [] },
+  // ASWEBO ZEEBRUGGE
+  { id: 'aswebo-z-1', klantId: 'k5', omschrijving: 'Zeebrugge', address: 'Zeebrugge', status: 'open', assignments: [] },
+  // KESTELEYN Charles
+  { id: 'kest-1', klantId: 'k6', omschrijving: 'Gent Ragnar laden', address: 'Gent', status: 'open', assignments: [] },
+  // HYE — 2 werven
+  { id: 'hye-1', klantId: 'k7', omschrijving: 'Antwerpen', address: 'Antwerpen', status: 'open', assignments: [] },
+  { id: 'hye-2', klantId: 'k7', omschrijving: 'Onderhoud patrimonium 543', address: 'Brugge', status: 'open', assignments: [] },
+  // JONCKHEERE
+  { id: 'jonck-1', klantId: 'k8', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', assignments: [] }
 ];
 
 export const seedWorkers = [

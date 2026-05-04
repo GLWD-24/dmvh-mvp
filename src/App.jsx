@@ -12,12 +12,19 @@ import Toast from './components/Toast.jsx';
 
 export default function App() {
   const [klanten, setKlanten] = useState(seedKlanten);
-  const [werven, setWerven] = useState(seedWerven.map(w => ({ ...w, assignments: [] })));
+  const [werven, setWerven] = useState(seedWerven.map(w => ({ ...w, assignments: w.assignments || [] })));
   const [workers, setWorkers] = useState(seedWorkers);
   const [machines, setMachines] = useState(seedMachines);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [incomingInvoices] = useState(seedIncomingInvoices);
   const [proposals, setProposals] = useState([]);
+
+  // Decorate werven with klant name from klanten lookup so components don't need refactoring
+  const klantenById = klanten.reduce((acc, k) => { acc[k.id] = k; return acc; }, {});
+  const decoratedWerven = werven.map(w => ({
+    ...w,
+    klant: klantenById[w.klantId]?.name || w.klant || '—'
+  }));
   const [tab, setTab] = useState('planning');
   const [toast, setToast] = useState(null);
   const [status, setStatus] = useState({ text: 'Ready', kind: 'info' });
@@ -69,7 +76,7 @@ export default function App() {
       }
       return { ...w, assignments: [...w.assignments, newAssignment] };
     }));
-    const target = werven.find(w => w.id === werfId);
+    const target = decoratedWerven.find(w => w.id === werfId);
     if (target) {
       showToast(kind === 'machine' && !target.assignments.length
         ? `Naakte verhuur aan ${target.klant} (HEMZELF)`
@@ -86,6 +93,13 @@ export default function App() {
       w.id === workerId ? { ...w, duplicates: (w.duplicates || 0) + 1 } : w
     ));
     showToast('Dubbele werknemer toegevoegd aan pool');
+  }, []);
+
+  const handleUpdateAssignment = useCallback((aid, patch) => {
+    setWerven(prev => prev.map(w => ({
+      ...w,
+      assignments: w.assignments.map(a => a.id === aid ? { ...a, ...patch } : a)
+    })));
   }, []);
 
   const handleSplit = useCallback((source, payload) => {
@@ -301,20 +315,20 @@ export default function App() {
     if (n === 1) {
       setTab('planning');
       setWerven(prev => prev.map(w => {
-        if (w.id === 'aveve') return { ...w, assignments: [{ id: 'a-d1', workerId: 'w1', machineId: 'm1' }] };
-        if (w.id === 'agro') return { ...w, assignments: [{ id: 'a-d2', workerId: 'w2', machineId: 'm3' }] };
+        if (w.id === 'aveve-1') return { ...w, assignments: [{ id: 'a-d1', workerId: 'w1', machineId: 'm1' }] };
+        if (w.id === 'agro-1') return { ...w, assignments: [{ id: 'a-d2', workerId: 'w2', machineId: 'm3' }] };
         return w;
       }));
       setStatus({ text: 'Planning opgeslagen — push verzonden', kind: 'success' });
       showToast('2 toewijzingen opgeslagen, mobile bijgewerkt');
     } else if (n === 2) {
-      setWerven(prev => prev.map(w => w.id === 'agro' && w.assignments.length === 0
+      setWerven(prev => prev.map(w => w.id === 'agro-1' && w.assignments.length === 0
         ? { ...w, assignments: [{ id: 'a-d2', workerId: 'w2', machineId: 'm3' }] } : w));
       setMobile({ screen: 'today', currentWerkbon: null });
       setStatus({ text: 'Mobile actief', kind: 'info' });
       showToast('Open de telefoon rechts en doorloop de werkbon', 'info');
     } else if (n === 3) {
-      setWerven(prev => prev.map(w => w.id === 'agro' && w.assignments.length === 0
+      setWerven(prev => prev.map(w => w.id === 'agro-1' && w.assignments.length === 0
         ? { ...w, assignments: [{ id: 'a-d2', workerId: 'w2', machineId: 'm3' }] } : w));
       setWerkbonnen(prev => prev.some(w => w.status === 'submitted')
         ? prev
@@ -411,9 +425,10 @@ export default function App() {
             <div className="flex-1 min-h-0 overflow-hidden">
               {tab === 'planning' && (
                 <PlanningTab
-                  werven={werven} workers={workers} machines={machines}
+                  werven={decoratedWerven} workers={workers} machines={machines}
                   onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
                   onDuplicate={handleDuplicate}
+                  onUpdateAssignment={handleUpdateAssignment}
                 />
               )}
               {tab === 'inbox' && (
@@ -456,7 +471,7 @@ export default function App() {
 
           <MobilePhone
             state={mobile}
-            werven={werven} workers={workers} machines={machines}
+            werven={decoratedWerven} workers={workers} machines={machines}
             onClockIn={mobileClockIn}
             onSubmitWerkbon={mobileSubmit}
             onReset={() => setMobile({ screen: 'today', currentWerkbon: null })}
