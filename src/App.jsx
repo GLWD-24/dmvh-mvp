@@ -4,14 +4,16 @@ import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
 import InvoiceTab from './components/InvoiceTab.jsx';
 import KlantenTab from './components/KlantenTab.jsx';
+import WerknemersTab from './components/WerknemersTab.jsx';
+import MachinesTab from './components/MachinesTab.jsx';
 import MobilePhone from './components/MobilePhone.jsx';
 import Toast from './components/Toast.jsx';
 
 export default function App() {
   const [klanten, setKlanten] = useState(seedKlanten);
   const [werven, setWerven] = useState(seedWerven.map(w => ({ ...w, assignments: [] })));
-  const [workers] = useState(seedWorkers);
-  const [machines] = useState(seedMachines);
+  const [workers, setWorkers] = useState(seedWorkers);
+  const [machines, setMachines] = useState(seedMachines);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [tab, setTab] = useState('planning');
   const [toast, setToast] = useState(null);
@@ -45,6 +47,7 @@ export default function App() {
     setWerven(prev => prev.map(w => ({ ...w, assignments: w.assignments.filter(a => a.id !== aid) })));
   }, []);
 
+  // Werkbonnen
   const handleApprove = (id) => {
     setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, status: 'approved' } : w));
     const wb = werkbonnen.find(w => w.id === id);
@@ -56,10 +59,46 @@ export default function App() {
     showToast('Werkbon afgewezen', 'warn');
   };
 
-  const handleKlantUpdate = (name, patch) => {
-    setKlanten(prev => prev.map(k => k.name === name ? { ...k, ...patch } : k));
-    showToast('Klant ' + name + ' opgeslagen');
-    setStatus({ text: 'Opgeslagen', kind: 'success' });
+  // Klanten CRUD
+  const klantSave = (id, patch) => {
+    setKlanten(prev => prev.map(k => k.id === id ? { ...k, ...patch } : k));
+    showToast('Klant opgeslagen');
+  };
+  const klantAdd = (newKlant) => {
+    setKlanten(prev => [...prev, newKlant]);
+    showToast('Nieuwe klant toegevoegd');
+  };
+  const klantDelete = (id) => {
+    setKlanten(prev => prev.filter(k => k.id !== id));
+    showToast('Klant verwijderd', 'warn');
+  };
+
+  // Werknemers CRUD
+  const workerSave = (id, patch) => {
+    setWorkers(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    showToast('Werknemer opgeslagen');
+  };
+  const workerAdd = (newWorker) => {
+    setWorkers(prev => [...prev, newWorker]);
+    showToast('Nieuwe werknemer toegevoegd');
+  };
+  const workerDelete = (id) => {
+    setWorkers(prev => prev.filter(w => w.id !== id));
+    showToast('Werknemer verwijderd', 'warn');
+  };
+
+  // Machines CRUD
+  const machineSave = (id, patch) => {
+    setMachines(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
+    showToast('Machine opgeslagen');
+  };
+  const machineAdd = (newMachine) => {
+    setMachines(prev => [...prev, newMachine]);
+    showToast('Nieuwe machine toegevoegd');
+  };
+  const machineDelete = (id) => {
+    setMachines(prev => prev.filter(m => m.id !== id));
+    showToast('Machine verwijderd', 'warn');
   };
 
   // Mobile handlers
@@ -119,7 +158,7 @@ export default function App() {
       setStatus({ text: 'Klik Genereer PDF', kind: 'info' });
     } else if (n === 5) {
       setTab('klanten');
-      setStatus({ text: 'Bewerk de betaaltermijn en klik Opslaan', kind: 'info' });
+      setStatus({ text: 'Wijzig velden en klik Opslaan', kind: 'info' });
     }
   };
 
@@ -161,20 +200,22 @@ export default function App() {
         </div>
 
         <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-3">
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col min-h-[600px]">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50">
-              <div className="flex gap-1">
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col min-h-[640px]">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50 overflow-x-auto">
+              <div className="flex gap-1 shrink-0">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
               </div>
-              <span className="text-xs text-slate-500">Planner — Demaecker &amp; Vanhaecke</span>
-              <nav className="ml-auto flex gap-1">
+              <span className="text-xs text-slate-500 shrink-0">Planner — D&amp;V</span>
+              <nav className="ml-auto flex gap-1 shrink-0">
                 {[
                   { id: 'planning', label: 'Planning' },
                   { id: 'inbox', label: 'Werkbonnen', badge: submittedCount },
                   { id: 'invoice', label: 'Facturen' },
-                  { id: 'klanten', label: 'Klanten' }
+                  { id: 'klanten', label: 'Klanten' },
+                  { id: 'werknemers', label: 'Werknemers' },
+                  { id: 'machines', label: 'Machines' }
                 ].map(t => (
                   <button
                     key={t.id}
@@ -192,21 +233,29 @@ export default function App() {
               </nav>
             </div>
 
-            {tab === 'planning' && (
-              <PlanningTab
-                werven={werven} workers={workers} machines={machines}
-                onAssign={handleAssign} onRemove={handleRemove}
-              />
-            )}
-            {tab === 'inbox' && (
-              <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />
-            )}
-            {tab === 'invoice' && (
-              <InvoiceTab klanten={klanten} werkbonnen={werkbonnen} />
-            )}
-            {tab === 'klanten' && (
-              <KlantenTab klanten={klanten} onUpdate={handleKlantUpdate} />
-            )}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {tab === 'planning' && (
+                <PlanningTab
+                  werven={werven} workers={workers} machines={machines}
+                  onAssign={handleAssign} onRemove={handleRemove}
+                />
+              )}
+              {tab === 'inbox' && (
+                <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />
+              )}
+              {tab === 'invoice' && (
+                <InvoiceTab klanten={klanten} werkbonnen={werkbonnen} />
+              )}
+              {tab === 'klanten' && (
+                <KlantenTab klanten={klanten} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />
+              )}
+              {tab === 'werknemers' && (
+                <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} />
+              )}
+              {tab === 'machines' && (
+                <MachinesTab machines={machines} onSave={machineSave} onAdd={machineAdd} onDelete={machineDelete} />
+              )}
+            </div>
           </div>
 
           <MobilePhone
@@ -219,7 +268,7 @@ export default function App() {
         </div>
 
         <footer className="mt-6 text-xs text-slate-400 text-center">
-          Prototype — geen backend, state reset bij refresh. Zie README voor volgende stappen.
+          Prototype — geen backend, state reset bij refresh.
         </footer>
       </div>
 
