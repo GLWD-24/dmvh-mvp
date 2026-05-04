@@ -28,18 +28,26 @@ export default function App() {
     setTimeout(() => setToast(null), 2400);
   };
 
-  const handleAssign = useCallback((werfId, kind, id) => {
+  const handleAssign = useCallback((werfId, kind, id, instanceKey) => {
     setWerven(prev => prev.map(w => {
       if (w.id !== werfId) return w;
       let last = w.assignments[w.assignments.length - 1];
       if (!last || (last.workerId && last.machineId)) {
-        last = { id: 'a' + Date.now() + Math.random(), workerId: null, machineId: null, half: 'full', hours: 8 };
+        last = {
+          id: 'a' + Date.now() + Math.random(),
+          workerId: null, machineId: null, half: 'full', hours: 8,
+          instanceKey: instanceKey || 'main'
+        };
         const next = { ...w, assignments: [...w.assignments, last] };
-        if (kind === 'worker') last.workerId = id;
+        if (kind === 'worker') { last.workerId = id; last.instanceKey = instanceKey || 'main'; }
         if (kind === 'machine') last.machineId = id;
         return next;
       }
-      const updated = w.assignments.map(a => a === last ? { ...a, [kind === 'worker' ? 'workerId' : 'machineId']: id } : a);
+      const updated = w.assignments.map(a => {
+        if (a !== last) return a;
+        if (kind === 'worker') return { ...a, workerId: id, instanceKey: instanceKey || 'main' };
+        return { ...a, machineId: id };
+      });
       return { ...w, assignments: updated };
     }));
     const target = werven.find(w => w.id === werfId);
@@ -48,6 +56,13 @@ export default function App() {
 
   const handleRemove = useCallback((aid) => {
     setWerven(prev => prev.map(w => ({ ...w, assignments: w.assignments.filter(a => a.id !== aid) })));
+  }, []);
+
+  const handleDuplicate = useCallback((workerId) => {
+    setWorkers(prev => prev.map(w =>
+      w.id === workerId ? { ...w, duplicates: (w.duplicates || 0) + 1 } : w
+    ));
+    showToast('Dubbele werknemer toegevoegd aan pool');
   }, []);
 
   const handleSplit = useCallback((source, payload) => {
@@ -369,6 +384,7 @@ export default function App() {
                 <PlanningTab
                   werven={werven} workers={workers} machines={machines}
                   onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
+                  onDuplicate={handleDuplicate}
                 />
               )}
               {tab === 'inbox' && (
