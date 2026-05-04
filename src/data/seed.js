@@ -27,7 +27,6 @@ export const seedWorkers = [
   { id: 'w2', name: 'EECKLOO FREDERIK', type: 'employee', function: 'Bestuurder', hireDate: '01/06/2015', uurloon1: 26.00, uurloon2: 39.00 },
   { id: 'w3', name: 'INGELBRECHT BART', type: 'employee', function: 'Bestuurder', hireDate: '12/09/2011', uurloon1: 27.50, uurloon2: 41.25 },
   { id: 'w4', name: 'DEMEULENAERE GINO', type: 'subcontractor', function: 'Bestuurder', hireDate: '20/01/2020', uurloon1: 52.00, uurloon2: 65.00 },
-  { id: 'w5', name: 'HEMZELF', type: 'employee', function: 'Arbeider', hireDate: '03/05/2019', uurloon1: 22.00, uurloon2: 33.00 },
   { id: 'w6', name: 'BOGAERT KRISTOF', type: 'employee', function: 'Bestuurder', hireDate: '07/11/2008', uurloon1: 28.75, uurloon2: 43.10 },
   { id: 'w7', name: 'KIMPE MANUEL', type: 'subcontractor', function: 'Bestuurder', hireDate: '14/02/2022', uurloon1: 48.50, uurloon2: 60.00 },
   { id: 'w8', name: 'OA HAECK JAN', type: 'employee', function: 'Chauffeur', hireDate: '22/08/2016', uurloon1: 23.50, uurloon2: 35.25 }
@@ -55,8 +54,8 @@ export const seedWerkbonnen = [
   // AGRO ENERGIEK Zomergem — recurring work
   { id: 'wb-1001', nr: 431720, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '14/04/2026', fiche: 8.5, bon: 8.5, rate: 95, status: 'approved', nota: '', incomingInvoiceId: null },
   { id: 'wb-1002', nr: 431721, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'EECKLOO FREDERIK', machine: 'Sen 835.44', date: '15/04/2026', fiche: 8.0, bon: 8.0, rate: 95, status: 'approved', nota: '', incomingInvoiceId: null },
-  { id: 'wb-1003', nr: 431722, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '15/04/2026', fiche: 7.5, bon: 7.5, rate: 70, status: 'approved', nota: 'TURF', incomingInvoiceId: null },
-  { id: 'wb-1004', nr: 431723, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '28/04/2026', fiche: 8.0, bon: 8.0, rate: 70, status: 'approved', nota: '', incomingInvoiceId: null },
+  { id: 'wb-1003', nr: 431722, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '15/04/2026', fiche: 7.5, bon: 7.5, rate: 70, status: 'approved', nota: 'TURF — naakte verhuur, klant bestuurt', incomingInvoiceId: null },
+  { id: 'wb-1004', nr: 431723, klant: 'AGRO ENERGIEK', werf: 'Zomergem', worker: 'HEMZELF', machine: 'Bobcat 9', date: '28/04/2026', fiche: 8.0, bon: 8.0, rate: 70, status: 'approved', nota: 'naakte verhuur', incomingInvoiceId: null },
 
   // BESIX Winterdijk — heavy recurring schedule
   { id: 'wb-1010', nr: 431730, klant: 'BESIX', werf: 'Winterdijk', worker: 'BOGAERT KRISTOF', machine: 'ZX210.08 WD', date: '01/04/2026', fiche: 7.5, bon: 7.5, rate: 90, status: 'approved', nota: 'Vandammesluis Vo', incomingInvoiceId: null },

@@ -395,15 +395,17 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
         {rows.map(wb => {
           const d = parseDate(wb.date);
           const discrepancy = wb.fiche !== wb.bon;
+          const isHemzelf = wb.worker === 'HEMZELF';
           return (
-            <tr key={wb.id} className={`border-b border-slate-100 hover:bg-slate-50 ${wb.disputed ? 'bg-red-50/40' : discrepancy ? 'bg-amber-50/30' : ''}`}>
+            <tr key={wb.id} className={`border-b border-slate-100 hover:bg-slate-50 ${wb.disputed ? 'bg-red-50/40' : discrepancy ? 'bg-amber-50/30' : isHemzelf ? 'bg-slate-50/60' : ''}`}>
               <td className="px-2 py-1 whitespace-nowrap">
                 {d && <span className="text-slate-400 mr-1">{dayName(d).slice(0, 3)}</span>}
                 {wb.date}
               </td>
               <td className="whitespace-nowrap">
-                {wb.worker}
+                {isHemzelf ? <span className="italic text-slate-700">HEMZELF</span> : wb.worker}
                 {isOA(wb.worker) && <span className="ml-1 text-[8px] px-1 py-0.5 rounded-full bg-amber-100 text-amber-800">OA</span>}
+                {isHemzelf && <span className="ml-1 text-[8px] px-1 py-0.5 rounded-full bg-slate-200 text-slate-700" title="Naakte machineverhuur — klant bestuurt zelf">naakt</span>}
                 {wb.disputed && <span className="ml-1 text-[8px] px-1 py-0.5 rounded-full bg-red-100 text-red-800" title="Disputed na afkeuring voorstel">disputed</span>}
               </td>
               <td className="text-slate-600 truncate max-w-[120px]" title={wb.werf}>{wb.werf}</td>
@@ -413,8 +415,8 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
                 <span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle" style={{ backgroundColor: machineColor(wb.machine) }} />
                 {wb.machine}
               </td>
-              {showPrices && <td className="text-right text-slate-500">€ {(wb.rate || 0).toFixed(0)}</td>}
-              {showPrices && <td className="text-right font-medium">€ {fmtEur((wb.bon || 0) * (wb.rate || 0))}</td>}
+              {showPrices && <td className={`text-right ${isHemzelf ? 'text-slate-400' : 'text-slate-500'}`}>€ {(wb.rate || 0).toFixed(0)}</td>}
+              {showPrices && <td className={`text-right font-medium ${isHemzelf ? 'text-slate-400' : ''}`}>€ {fmtEur((wb.bon || 0) * (wb.rate || 0))}</td>}
               <td className="text-slate-500 truncate max-w-[140px]" title={wb.nota}>{wb.nota || ''}</td>
             </tr>
           );

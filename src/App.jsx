@@ -32,26 +32,49 @@ export default function App() {
     setWerven(prev => prev.map(w => {
       if (w.id !== werfId) return w;
       let last = w.assignments[w.assignments.length - 1];
-      if (!last || (last.workerId && last.machineId)) {
-        last = {
-          id: 'a' + Date.now() + Math.random(),
-          workerId: null, machineId: null, half: 'full', hours: 8,
-          instanceKey: instanceKey || 'main'
-        };
-        const next = { ...w, assignments: [...w.assignments, last] };
-        if (kind === 'worker') { last.workerId = id; last.instanceKey = instanceKey || 'main'; }
-        if (kind === 'machine') last.machineId = id;
-        return next;
+      // Last assignment is "open" if missing one slot, OR if it's a HEMZELF-machine combo and a worker is being dropped
+      const isHemzelfReplacement = last && kind === 'worker' && last.workerId === 'HEMZELF';
+      const lastIncomplete = last && (
+        (last.workerId && !last.machineId) ||
+        (!last.workerId && last.machineId) ||
+        isHemzelfReplacement
+      );
+
+      if (lastIncomplete) {
+        const updated = w.assignments.map(a => {
+          if (a !== last) return a;
+          if (kind === 'worker') {
+            return { ...a, workerId: id, instanceKey: instanceKey || 'main' };
+          }
+          return { ...a, machineId: id };
+        });
+        return { ...w, assignments: updated };
       }
-      const updated = w.assignments.map(a => {
-        if (a !== last) return a;
-        if (kind === 'worker') return { ...a, workerId: id, instanceKey: instanceKey || 'main' };
-        return { ...a, machineId: id };
-      });
-      return { ...w, assignments: updated };
+
+      // Create new assignment
+      const newAssignment = {
+        id: 'a' + Date.now() + Math.random(),
+        workerId: null,
+        machineId: null,
+        half: 'full',
+        hours: 8,
+        instanceKey: instanceKey || 'main'
+      };
+      if (kind === 'worker') {
+        newAssignment.workerId = id;
+      } else if (kind === 'machine') {
+        // Solo machine drop = naakte verhuur (HEMZELF, OA = 0)
+        newAssignment.workerId = 'HEMZELF';
+        newAssignment.machineId = id;
+      }
+      return { ...w, assignments: [...w.assignments, newAssignment] };
     }));
     const target = werven.find(w => w.id === werfId);
-    if (target) showToast('Toegewezen aan ' + target.klant);
+    if (target) {
+      showToast(kind === 'machine' && !target.assignments.length
+        ? `Naakte verhuur aan ${target.klant} (HEMZELF)`
+        : 'Toegewezen aan ' + target.klant);
+    }
   }, [werven]);
 
   const handleRemove = useCallback((aid) => {

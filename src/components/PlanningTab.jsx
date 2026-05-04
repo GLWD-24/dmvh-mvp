@@ -163,18 +163,24 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                     <span className="text-[10px] text-slate-400">Sleep hier...</span>
                   ) : (
                     w.assignments.map(a => {
-                      const wk = workers.find(x => x.id === a.workerId);
+                      const isHemzelf = a.workerId === 'HEMZELF';
+                      const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
                       const mc = machines.find(x => x.id === a.machineId);
                       const half = a.half || 'full';
                       const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : null;
                       const halfBadgeColor = half === 'am' ? 'bg-blue-100 text-blue-800' : half === 'pm' ? 'bg-amber-100 text-amber-800' : '';
-                      const canSplit = wk && half === 'full';
+                      const canSplit = (wk || isHemzelf) && half === 'full';
                       const isDup = a.instanceKey && a.instanceKey !== 'main';
 
                       return (
                         <span
                           key={a.id}
-                          className={`inline-flex items-center gap-1 bg-white border ${half === 'pm' ? 'border-amber-300' : isDup ? 'border-purple-300' : 'border-slate-200'} rounded-full px-2 py-0.5 text-[10px] mr-1 mt-1`}
+                          className={`inline-flex items-center gap-1 bg-white border ${
+                            isHemzelf ? 'border-slate-400 bg-slate-50' :
+                            half === 'pm' ? 'border-amber-300' :
+                            isDup ? 'border-purple-300' :
+                            'border-slate-200'
+                          } rounded-full px-2 py-0.5 text-[10px] mr-1 mt-1`}
                         >
                           {halfLabel && (
                             <span className={`text-[8px] font-semibold px-1 rounded ${halfBadgeColor}`}>{halfLabel}</span>
@@ -182,17 +188,23 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                           {isDup && (
                             <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800" title="Dubbele werknemer instantie">×2</span>
                           )}
+                          {isHemzelf && (
+                            <span className="text-slate-700 italic" title="Naakte machineverhuur — klant bestuurt zelf">HEMZELF</span>
+                          )}
                           {wk && (
                             <span className={half === 'pm' ? 'lowercase' : ''}>
                               {renderName(wk.name, half)}
                             </span>
                           )}
-                          {wk && mc && ' · '}
+                          {(wk || isHemzelf) && mc && ' · '}
                           {mc && mc.code}
+                          {isHemzelf && (
+                            <span className="text-slate-400 ml-1 text-[9px]" title="OA-tarief = € 0">€0 OA</span>
+                          )}
                           {a.hours && a.hours !== 8 && (
                             <span className="text-slate-400 ml-1">{a.hours}u</span>
                           )}
-                          {canSplit && (
+                          {canSplit && !isHemzelf && (
                             <button
                               onClick={() => setSplitDialog({
                                 sourceWerfId: w.id,
@@ -515,16 +527,18 @@ function PrintView({ date, werven, workers, machines }) {
               </thead>
               <tbody>
                 {w.assignments.map(a => {
-                  const wk = workers.find(x => x.id === a.workerId);
+                  const isHemzelf = a.workerId === 'HEMZELF';
+                  const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
                   const mc = machines.find(x => x.id === a.machineId);
                   const half = a.half || 'full';
                   const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : '';
                   return (
-                    <tr key={a.id} className="border-b border-slate-100">
+                    <tr key={a.id} className={`border-b border-slate-100 ${isHemzelf ? 'bg-slate-50' : ''}`}>
                       <td className="py-1">{halfLabel}</td>
                       <td className={half === 'pm' ? 'lowercase' : ''}>
-                        {wk ? renderName(wk.name, half) : '—'}
+                        {isHemzelf ? <span className="italic text-slate-700">HEMZELF</span> : (wk ? renderName(wk.name, half) : '—')}
                         {a.instanceKey && a.instanceKey !== 'main' && <span className="ml-1 text-[9px] text-purple-700">×2</span>}
+                        {isHemzelf && <span className="ml-1 text-[9px] text-slate-500">(naakt)</span>}
                       </td>
                       <td>{mc?.code || '—'}</td>
                       <td className="text-right">{a.hours || 8} u</td>
