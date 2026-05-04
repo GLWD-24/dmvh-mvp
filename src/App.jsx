@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices } from './data/seed.js';
 import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
-import InvoiceTab from './components/InvoiceTab.jsx';
+import FacturatieTab from './components/FacturatieTab.jsx';
 import KlantenTab from './components/KlantenTab.jsx';
 import WerknemersTab from './components/WerknemersTab.jsx';
 import MachinesTab from './components/MachinesTab.jsx';
@@ -17,6 +17,7 @@ export default function App() {
   const [machines, setMachines] = useState(seedMachines);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [incomingInvoices] = useState(seedIncomingInvoices);
+  const [proposals, setProposals] = useState([]);
   const [tab, setTab] = useState('planning');
   const [toast, setToast] = useState(null);
   const [status, setStatus] = useState({ text: 'Ready', kind: 'info' });
@@ -95,6 +96,91 @@ export default function App() {
   const handleWerkbonUpdate = (id, patch) => {
     setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
     showToast('Uren bijgewerkt');
+  };
+
+  // Proposals — voorstel tot facturatie lifecycle
+  const proposalCreate = ({ klant, period, lines, subtotal }) => {
+    const seq = proposals.length + 1;
+    const nr = `V2026-${String(421 + seq).padStart(4, '0')}`;
+    const newProposal = {
+      id: 'p-' + Date.now(),
+      nr,
+      klant,
+      period,
+      subtotal,
+      lines: lines.map(l => ({ ...l })),
+      lineIds: lines.map(l => l.id),
+      status: 'draft',
+      createdDate: '04/05/2026',
+      poNr: null,
+      approveNote: null,
+      rejectReason: null,
+      rejectDate: null
+    };
+    setProposals(prev => [newProposal, ...prev]);
+    showToast(`Voorstel ${nr} aangemaakt`);
+    setStatus({ text: 'Voorstel klaar — verzend naar klant', kind: 'info' });
+  };
+
+  const proposalSend = (id) => {
+    setProposals(prev => prev.map(p => p.id === id ? { ...p, status: 'sent' } : p));
+    showToast('Voorstel verzonden naar klant');
+    setStatus({ text: 'In afwachting van klant', kind: 'warn' });
+  };
+
+  const proposalApprove = (id, { poNr, note, date }) => {
+    setProposals(prev => prev.map(p =>
+      p.id === id ? { ...p, status: 'approved', poNr, approveNote: note, approveDate: date } : p
+    ));
+    showToast('Goedkeuring + PO geregistreerd', 'success');
+    setStatus({ text: 'PO ontvangen — klaar voor facturatie', kind: 'success' });
+  };
+
+  const proposalReject = (id, { reason, date }) => {
+    const proposal = proposals.find(p => p.id === id);
+    setProposals(prev => prev.map(p =>
+      p.id === id ? { ...p, status: 'rejected', rejectReason: reason, rejectDate: date } : p
+    ));
+    // Mark linked werkbonnen as disputed
+    if (proposal) {
+      setWerkbonnen(prev => prev.map(w =>
+        proposal.lineIds.includes(w.id) ? { ...w, disputed: true } : w
+      ));
+    }
+    showToast('Afkeuring geregistreerd — werkbonnen disputed', 'warn');
+    setStatus({ text: 'Voorstel afgekeurd', kind: 'warn' });
+  };
+
+  const proposalConvert = (id) => {
+    setProposals(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      const seq = prev.filter(x => x.status === 'invoiced' || x.status === 'paid').length + 1;
+      const invoiceNr = `F2026-${String(720 + seq).padStart(4, '0')}`;
+      return { ...p, status: 'invoiced', nr: invoiceNr, invoiceDate: '04/05/2026' };
+    }));
+    // Mark linked werkbonnen as invoiced
+    const proposal = proposals.find(p => p.id === id);
+    if (proposal) {
+      setWerkbonnen(prev => prev.map(w =>
+        proposal.lineIds.includes(w.id) ? { ...w, status: 'invoiced' } : w
+      ));
+    }
+    showToast('Definitieve factuur gegenereerd');
+    setStatus({ text: 'Factuur klaar voor verzending', kind: 'success' });
+  };
+
+  const proposalReopen = (id) => {
+    const proposal = proposals.find(p => p.id === id);
+    setProposals(prev => prev.map(p =>
+      p.id === id ? { ...p, status: 'draft', rejectReason: null, rejectDate: null } : p
+    ));
+    // Clear disputed flag on linked werkbonnen
+    if (proposal) {
+      setWerkbonnen(prev => prev.map(w =>
+        proposal.lineIds.includes(w.id) ? { ...w, disputed: false } : w
+      ));
+    }
+    showToast('Voorstel heropend — werkbonnen vrij');
   };
 
   // Klanten CRUD
@@ -193,7 +279,13 @@ export default function App() {
       setStatus({ text: '1 werkbon ter goedkeuring', kind: 'warn' });
     } else if (n === 4) {
       setTab('invoice');
-      setStatus({ text: 'Klik Genereer PDF', kind: 'info' });
+      // Auto-create a proposal for AGRO ENERGIEK to demonstrate the flow
+      const lines = werkbonnen.filter(w => w.klant === 'AGRO ENERGIEK' && w.status === 'approved' && !w.disputed);
+      const subtotal = lines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+      if (lines.length > 0 && !proposals.some(p => p.klant === 'AGRO ENERGIEK')) {
+        proposalCreate({ klant: 'AGRO ENERGIEK', period: 'April 2026', lines, subtotal });
+      }
+      setStatus({ text: 'Voorstel aangemaakt — bekijk PDF, verzend, en verwerk PO', kind: 'info' });
     } else if (n === 5) {
       setTab('klanten');
       setStatus({ text: 'Wijzig velden en klik Opslaan', kind: 'info' });
@@ -251,7 +343,7 @@ export default function App() {
                   { id: 'planning', label: 'Planning' },
                   { id: 'inbox', label: 'Werkbonnen', badge: submittedCount },
                   { id: 'uurrooster', label: 'Uurrooster' },
-                  { id: 'invoice', label: 'Facturen' },
+                  { id: 'invoice', label: 'Facturatie' },
                   { id: 'klanten', label: 'Klanten' },
                   { id: 'werknemers', label: 'Werknemers' },
                   { id: 'machines', label: 'Machines' }
@@ -293,7 +385,17 @@ export default function App() {
                 />
               )}
               {tab === 'invoice' && (
-                <InvoiceTab klanten={klanten} werkbonnen={werkbonnen} />
+                <FacturatieTab
+                  klanten={klanten}
+                  werkbonnen={werkbonnen}
+                  proposals={proposals}
+                  onCreate={proposalCreate}
+                  onSend={proposalSend}
+                  onApprove={proposalApprove}
+                  onReject={proposalReject}
+                  onConvertToInvoice={proposalConvert}
+                  onReopen={proposalReopen}
+                />
               )}
               {tab === 'klanten' && (
                 <KlantenTab klanten={klanten} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />

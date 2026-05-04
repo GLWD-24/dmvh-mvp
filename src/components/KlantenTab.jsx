@@ -3,7 +3,7 @@ import MasterDataShell, { FormField, TextInput } from './MasterDataShell.jsx';
 
 const blank = {
   name: '', address: '', vat: '', terms: 30, contact: '',
-  phone: '', email: '', mobile: '', fax: ''
+  phone: '', email: '', mobile: '', fax: '', noPO: false
 };
 
 export default function KlantenTab({ klanten, onSave, onAdd, onDelete }) {
@@ -83,6 +83,22 @@ export default function KlantenTab({ klanten, onSave, onAdd, onDelete }) {
             <FormField label="Fax">
               <TextInput value={draft.fax} onChange={v => update('fax', v)} />
             </FormField>
+            <div className="col-span-2 mt-2 pt-3 border-t border-slate-200">
+              <label className="flex items-start gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!draft.noPO}
+                  onChange={e => update('noPO', e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">Klant werkt zonder PO</span>
+                  <span className="block text-[10px] text-slate-500 mt-0.5">
+                    Voorstellen tot factuur kunnen goedgekeurd worden zonder PO-nummer in te vullen.
+                  </span>
+                </span>
+              </label>
+            </div>
           </div>
           <button
             onClick={handleSave}

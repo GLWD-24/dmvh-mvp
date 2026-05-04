@@ -396,7 +396,7 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
           const d = parseDate(wb.date);
           const discrepancy = wb.fiche !== wb.bon;
           return (
-            <tr key={wb.id} className={`border-b border-slate-100 hover:bg-slate-50 ${discrepancy ? 'bg-amber-50/30' : ''}`}>
+            <tr key={wb.id} className={`border-b border-slate-100 hover:bg-slate-50 ${wb.disputed ? 'bg-red-50/40' : discrepancy ? 'bg-amber-50/30' : ''}`}>
               <td className="px-2 py-1 whitespace-nowrap">
                 {d && <span className="text-slate-400 mr-1">{dayName(d).slice(0, 3)}</span>}
                 {wb.date}
@@ -404,6 +404,7 @@ function UurroosterTable({ rows, showPrices, machineColor, editing, setEditing, 
               <td className="whitespace-nowrap">
                 {wb.worker}
                 {isOA(wb.worker) && <span className="ml-1 text-[8px] px-1 py-0.5 rounded-full bg-amber-100 text-amber-800">OA</span>}
+                {wb.disputed && <span className="ml-1 text-[8px] px-1 py-0.5 rounded-full bg-red-100 text-red-800" title="Disputed na afkeuring voorstel">disputed</span>}
               </td>
               <td className="text-slate-600 truncate max-w-[120px]" title={wb.werf}>{wb.werf}</td>
               <td className="text-right pr-2">{renderCell(wb, 'fiche')}</td>

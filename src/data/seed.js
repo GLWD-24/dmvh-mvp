@@ -2,14 +2,14 @@
 // Replace with real API calls when wiring the backend.
 
 export const seedKlanten = [
-  { id: 'k1', name: 'AVEVE AALTER', address: 'Markt 12, 9880 Aalter', vat: 'BE 0420.343.659', terms: 30, contact: 'J. Maes', phone: '09 374 12 34', email: 'j.maes@aveve-aalter.be', mobile: '0475 11 22 33', fax: '09 374 12 35' },
-  { id: 'k2', name: 'AGRO ENERGIEK', address: 'Industrieweg 5, 9930 Zomergem', vat: 'BE 0451.221.118', terms: 30, contact: 'P. Verstraete', phone: '09 372 88 99', email: 'info@agroenergiek.be', mobile: '0496 55 44 33', fax: '' },
-  { id: 'k3', name: 'BESIX', address: 'Avenue des Communautés 100, 1200 Brussel', vat: 'BE 0407.573.196', terms: 60, contact: 'K. Bogaert', phone: '02 402 62 11', email: 'k.bogaert@besix.com', mobile: '0477 88 99 00', fax: '02 402 62 12' },
-  { id: 'k4', name: 'ASWEBO ROESELARE', address: 'Bruggesteenweg 145, 8800 Roeselare', vat: 'BE 0406.661.452', terms: 45, contact: 'W. Oosterlinck', phone: '051 26 30 30', email: 'w.oosterlinck@aswebo.be', mobile: '0498 12 34 56', fax: '' },
-  { id: 'k5', name: 'ASWEBO ZEEBRUGGE', address: 'Kustlaan 1, 8380 Zeebrugge', vat: 'BE 0406.661.452', terms: 45, contact: 'W. Oosterlinck', phone: '050 54 12 34', email: 'w.oosterlinck@aswebo.be', mobile: '0498 12 34 56', fax: '' },
-  { id: 'k6', name: 'KESTELEYN Charles', address: 'Burgstraat 88, 9000 Gent', vat: 'BE 0512.998.224', terms: 30, contact: 'C. Kesteleyn', phone: '09 224 55 66', email: 'charles@kesteleyn.be', mobile: '0475 99 88 77', fax: '' },
-  { id: 'k7', name: 'HYE', address: 'Noordlaan 22, 2030 Antwerpen', vat: 'BE 0404.882.001', terms: 45, contact: 'M. Hye', phone: '03 541 22 33', email: 'm.hye@hye.be', mobile: '0476 33 22 11', fax: '03 541 22 34' },
-  { id: 'k8', name: 'JONCKHEERE', address: 'Spinnerijstraat 7, 8800 Roeselare', vat: 'BE 0405.117.299', terms: 30, contact: 'F. Jonckheere', phone: '051 23 45 67', email: 'info@jonckheere.be', mobile: '', fax: '' }
+  { id: 'k1', name: 'AVEVE AALTER', address: 'Markt 12, 9880 Aalter', vat: 'BE 0420.343.659', terms: 30, contact: 'J. Maes', phone: '09 374 12 34', email: 'j.maes@aveve-aalter.be', mobile: '0475 11 22 33', fax: '09 374 12 35', noPO: true },
+  { id: 'k2', name: 'AGRO ENERGIEK', address: 'Industrieweg 5, 9930 Zomergem', vat: 'BE 0451.221.118', terms: 30, contact: 'P. Verstraete', phone: '09 372 88 99', email: 'info@agroenergiek.be', mobile: '0496 55 44 33', fax: '', noPO: false },
+  { id: 'k3', name: 'BESIX', address: 'Avenue des Communautés 100, 1200 Brussel', vat: 'BE 0407.573.196', terms: 60, contact: 'K. Bogaert', phone: '02 402 62 11', email: 'k.bogaert@besix.com', mobile: '0477 88 99 00', fax: '02 402 62 12', noPO: false },
+  { id: 'k4', name: 'ASWEBO ROESELARE', address: 'Bruggesteenweg 145, 8800 Roeselare', vat: 'BE 0406.661.452', terms: 45, contact: 'W. Oosterlinck', phone: '051 26 30 30', email: 'w.oosterlinck@aswebo.be', mobile: '0498 12 34 56', fax: '', noPO: false },
+  { id: 'k5', name: 'ASWEBO ZEEBRUGGE', address: 'Kustlaan 1, 8380 Zeebrugge', vat: 'BE 0406.661.452', terms: 45, contact: 'W. Oosterlinck', phone: '050 54 12 34', email: 'w.oosterlinck@aswebo.be', mobile: '0498 12 34 56', fax: '', noPO: false },
+  { id: 'k6', name: 'KESTELEYN Charles', address: 'Burgstraat 88, 9000 Gent', vat: 'BE 0512.998.224', terms: 30, contact: 'C. Kesteleyn', phone: '09 224 55 66', email: 'charles@kesteleyn.be', mobile: '0475 99 88 77', fax: '', noPO: true },
+  { id: 'k7', name: 'HYE', address: 'Noordlaan 22, 2030 Antwerpen', vat: 'BE 0404.882.001', terms: 45, contact: 'M. Hye', phone: '03 541 22 33', email: 'm.hye@hye.be', mobile: '0476 33 22 11', fax: '03 541 22 34', noPO: false },
+  { id: 'k8', name: 'JONCKHEERE', address: 'Spinnerijstraat 7, 8800 Roeselare', vat: 'BE 0405.117.299', terms: 30, contact: 'F. Jonckheere', phone: '051 23 45 67', email: 'info@jonckheere.be', mobile: '', fax: '', noPO: false }
 ];
 
 export const seedWerven = [
