@@ -4,6 +4,7 @@ import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
 import FacturatieTab from './components/FacturatieTab.jsx';
 import KlantenTab from './components/KlantenTab.jsx';
+import WervenTab from './components/WervenTab.jsx';
 import WerknemersTab from './components/WerknemersTab.jsx';
 import MachinesTab from './components/MachinesTab.jsx';
 import UurroosterTab from './components/UurroosterTab.jsx';
@@ -100,6 +101,81 @@ export default function App() {
       ...w,
       assignments: w.assignments.map(a => a.id === aid ? { ...a, ...patch } : a)
     })));
+  }, []);
+
+  const handleAddWerf = useCallback((data) => {
+    const today = new Date(2026, 4, 4);
+    const startStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const newWerf = {
+      id: 'w-' + Date.now(),
+      klantId: data.klantId,
+      omschrijving: data.omschrijving,
+      address: data.address,
+      status: 'open',
+      startDate: startStr,
+      endDate: null,
+      assignments: []
+    };
+    setWerven(prev => [...prev, newWerf]);
+    showToast('Werf toegevoegd');
+  }, []);
+
+  const handleAddWorker = useCallback((data) => {
+    const today = new Date(2026, 4, 4);
+    const hireStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const newWorker = {
+      id: 'w-' + Date.now(),
+      hireDate: hireStr,
+      endDate: null,
+      ...data
+    };
+    setWorkers(prev => [...prev, newWorker]);
+    showToast(`${data.type === 'subcontractor' ? 'Onderaannemer' : 'Werknemer'} toegevoegd`);
+  }, []);
+
+  const handleAddMachineFromPlanning = useCallback((data) => {
+    const newMachine = {
+      id: 'm-' + Date.now(),
+      ...data
+    };
+    setMachines(prev => [...prev, newMachine]);
+    showToast('Machine toegevoegd');
+  }, []);
+
+  // Daily pool: which werven/workers/machines are on today's planning view.
+  // Default: include everything that's not closed (so the demo has data to show).
+  const [dailyPool, setDailyPool] = useState({
+    werven: new Set(seedWerven.filter(w => !w.endDate).map(w => w.id)),
+    workers: new Set(seedWorkers.filter(w => !w.endDate).map(w => w.id)),
+    machines: new Set(seedMachines.filter(m => !m.endDate).map(m => m.id))
+  });
+
+  const handleAddToPool = useCallback((kind, ids) => {
+    setDailyPool(prev => ({ ...prev, [kind]: new Set(ids) }));
+    showToast(`Dagplanning bijgewerkt`);
+  }, []);
+
+  const handleRemoveFromPool = useCallback((kind, id) => {
+    setDailyPool(prev => {
+      const next = new Set(prev[kind]);
+      next.delete(id);
+      return { ...prev, [kind]: next };
+    });
+
+    // Also clear assignments referencing the removed item from werven
+    if (kind === 'workers') {
+      setWerven(prev => prev.map(w => ({
+        ...w,
+        assignments: w.assignments.filter(a => a.workerId !== id)
+      })));
+    } else if (kind === 'machines') {
+      setWerven(prev => prev.map(w => ({
+        ...w,
+        assignments: w.assignments.filter(a => a.machineId !== id)
+      })));
+    }
+    // For werven removal: keep assignments inside the werf (in case it's added back later)
+    showToast('Uit dagplanning gehaald');
   }, []);
 
   const handleSplit = useCallback((source, payload) => {
@@ -277,6 +353,37 @@ export default function App() {
     showToast('Machine verwijderd', 'warn');
   };
 
+  // Werven CRUD (master data tab)
+  const werfSave = (id, patch) => {
+    setWerven(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    showToast('Werf opgeslagen');
+  };
+  const werfAdd = (newWerf) => {
+    const today = new Date(2026, 4, 4);
+    const startStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const id = 'w-' + Date.now();
+    const w = {
+      id,
+      status: 'open',
+      startDate: startStr,
+      endDate: null,
+      assignments: [],
+      ...newWerf
+    };
+    setWerven(prev => [...prev, w]);
+    showToast('Nieuwe werf toegevoegd');
+    return id;
+  };
+  const werfDelete = (id) => {
+    setWerven(prev => prev.filter(w => w.id !== id));
+    setDailyPool(prev => {
+      const next = new Set(prev.werven);
+      next.delete(id);
+      return { ...prev, werven: next };
+    });
+    showToast('Werf verwijderd', 'warn');
+  };
+
   // Mobile handlers
   const mobileClockIn = (werf, machine) => {
     setMobile({
@@ -403,6 +510,7 @@ export default function App() {
                   { id: 'uurrooster', label: 'Uurrooster' },
                   { id: 'invoice', label: 'Facturatie' },
                   { id: 'klanten', label: 'Klanten' },
+                  { id: 'werven', label: 'Werven' },
                   { id: 'werknemers', label: 'Werknemers' },
                   { id: 'machines', label: 'Machines' }
                 ].map(t => (
@@ -425,7 +533,10 @@ export default function App() {
             <div className="flex-1 min-h-0 overflow-hidden">
               {tab === 'planning' && (
                 <PlanningTab
-                  werven={decoratedWerven} workers={workers} machines={machines}
+                  werven={decoratedWerven} klanten={klanten} workers={workers} machines={machines}
+                  dailyPool={dailyPool}
+                  onAddToPool={handleAddToPool}
+                  onRemoveFromPool={handleRemoveFromPool}
                   onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
                   onDuplicate={handleDuplicate}
                   onUpdateAssignment={handleUpdateAssignment}
@@ -458,7 +569,10 @@ export default function App() {
                 />
               )}
               {tab === 'klanten' && (
-                <KlantenTab klanten={klanten} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />
+                <KlantenTab klanten={klanten} werven={werven} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />
+              )}
+              {tab === 'werven' && (
+                <WervenTab werven={werven} klanten={klanten} onSave={werfSave} onAdd={werfAdd} onDelete={werfDelete} />
               )}
               {tab === 'werknemers' && (
                 <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} />

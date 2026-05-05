@@ -6,7 +6,7 @@ const blank = {
   phone: '', email: '', mobile: '', fax: '', noPO: false
 };
 
-export default function KlantenTab({ klanten, onSave, onAdd, onDelete }) {
+export default function KlantenTab({ klanten, werven, onSave, onAdd, onDelete }) {
   const [selectedId, setSelectedId] = useState(klanten[0]?.id || null);
   const [draft, setDraft] = useState(blank);
   const [dirty, setDirty] = useState(false);
@@ -107,6 +107,49 @@ export default function KlantenTab({ klanten, onSave, onAdd, onDelete }) {
           >
             Opslaan
           </button>
+
+          {selectedId && werven && (
+            <div className="mt-6 pt-4 border-t border-slate-200">
+              <div className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <span>Werven van deze klant</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  ({werven.filter(w => w.klantId === selectedId).length})
+                </span>
+              </div>
+              {(() => {
+                const klantWerven = werven.filter(w => w.klantId === selectedId);
+                if (klantWerven.length === 0) {
+                  return <div className="text-[11px] text-slate-400 italic">Nog geen werven gekoppeld aan deze klant.</div>;
+                }
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    {klantWerven.map(w => (
+                      <div key={w.id} className="bg-white border border-slate-200 rounded p-2 flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium flex items-center gap-2">
+                            {w.omschrijving || '(geen naam)'}
+                            {w.endDate ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">afgesloten</span>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">open</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">
+                            {w.address}
+                            {w.startDate && <> · sinds {w.startDate}</>}
+                            {w.endDate && <> · afgesloten op {w.endDate}</>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <div className="text-[10px] text-slate-400 mt-2 italic">
+                💡 Werven beheer je in het Werven tabblad.
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center text-xs text-slate-400 py-12">Selecteer een klant</div>

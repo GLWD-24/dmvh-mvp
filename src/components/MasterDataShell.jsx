@@ -17,6 +17,10 @@ export default function MasterDataShell({
   groupBy = null
 }) {
   const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const selectedItem = items.find(it => it.id === selectedId);
+  const itemLabel = selectedItem?.name || selectedItem?.code || selectedItem?.klant || 'dit item';
 
   const filtered = useMemo(() => {
     if (!search.trim()) return items;
@@ -92,14 +96,40 @@ export default function MasterDataShell({
         {selectedId && (
           <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
             <button
-              onClick={() => { if (confirm('Verwijderen?')) onDelete(selectedId); }}
-              className="text-xs px-3 py-1.5 rounded text-red-700 hover:bg-red-50 border border-red-200"
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs px-3 py-1.5 rounded text-red-700 hover:bg-red-50 border border-red-200 flex items-center gap-1.5"
             >
-              Verwijderen
+              <span>🗑</span> Verwijderen
             </button>
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-[420px] p-5">
+            <h3 className="text-base font-semibold text-red-700 mb-2">Verwijderen?</h3>
+            <p className="text-xs text-slate-700 mb-4">
+              Ben je zeker dat je <strong>{itemLabel}</strong> definitief wil verwijderen?
+              Deze actie kan niet ongedaan gemaakt worden. Historische werkbonnen blijven bewaard.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs px-4 py-2 rounded border border-slate-300 hover:bg-slate-50"
+              >
+                Annuleren
+              </button>
+              <button
+                onClick={() => { onDelete(selectedId); setConfirmDelete(false); }}
+                className="text-xs px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+              >
+                🗑 Definitief verwijderen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

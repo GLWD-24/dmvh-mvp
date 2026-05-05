@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import MultiSelectPopover from './MultiSelectPopover.jsx';
 
 const MONTHS_NL = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
 const DAYS_NL = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
@@ -18,11 +19,25 @@ const renderName = (workerName, half) => {
   return workerName;
 };
 
-export default function PlanningTab({ werven, workers, machines, onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment }) {
+export default function PlanningTab({
+  werven, klanten, workers, machines,
+  dailyPool, onAddToPool, onRemoveFromPool,
+  onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment
+}) {
   const [splitDialog, setSplitDialog] = useState(null);
   const [currentDate, setCurrentDate] = useState(todayDate());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [printPreview, setPrintPreview] = useState(false);
+
+  // Selection state for the − button
+  const [selectedWerfId, setSelectedWerfId] = useState(null);
+  const [selectedWorkerId, setSelectedWorkerId] = useState(null);
+  const [selectedMachineId, setSelectedMachineId] = useState(null);
+
+  // Popover state for + button
+  const [addWerfPopover, setAddWerfPopover] = useState(false);
+  const [addWorkerPopover, setAddWorkerPopover] = useState(false);
+  const [addMachinePopover, setAddMachinePopover] = useState(false);
 
   const calendarRef = useRef(null);
 
@@ -146,13 +161,18 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Werven</div>
           <div className="flex flex-col gap-2">
-            {werven.map(w => (
+            {werven.filter(w => dailyPool.werven.has(w.id)).map(w => {
+              const isSelected = selectedWerfId === w.id;
+              return (
               <div
                 key={w.id}
+                onClick={() => setSelectedWerfId(isSelected ? null : w.id)}
                 onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'bg-blue-50'); }}
                 onDragLeave={e => e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-50')}
                 onDrop={e => handleDrop(w.id, e)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 min-h-[64px] transition"
+                className={`bg-slate-50 border rounded-lg px-3 py-2 min-h-[64px] transition cursor-pointer ${
+                  isSelected ? 'border-blue-500 ring-1 ring-blue-300 bg-blue-50/40' : 'border-slate-200 hover:border-slate-300'
+                }`}
               >
                 <div className="flex justify-between items-baseline">
                   <span className="text-xs font-semibold">{w.klant}</span>
@@ -246,7 +266,48 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
+          </div>
+          {/* +/− toolbar — items toevoegen aan/verwijderen uit dagplanning */}
+          <div className="flex gap-1.5 mt-2 px-1 items-center relative">
+            <button
+              onClick={() => setAddWerfPopover(true)}
+              className="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 text-slate-700 text-base font-semibold flex items-center justify-center leading-none"
+              title="Werven aan dagplanning toevoegen"
+            >
+              +
+            </button>
+            <button
+              onClick={() => {
+                if (!selectedWerfId) return;
+                onRemoveFromPool('werven', selectedWerfId);
+                setSelectedWerfId(null);
+              }}
+              disabled={!selectedWerfId}
+              className="w-8 h-8 rounded bg-slate-200 hover:bg-slate-300 disabled:opacity-30 disabled:cursor-not-allowed text-slate-700 text-base font-semibold flex items-center justify-center leading-none"
+              title={selectedWerfId ? 'Geselecteerde werf uit dagplanning halen' : 'Selecteer eerst een werf'}
+            >
+              −
+            </button>
+            {selectedWerfId && (
+              <span className="text-[10px] text-slate-500 italic">
+                klik − om uit dagplanning te halen
+              </span>
+            )}
+            {addWerfPopover && (
+              <MultiSelectPopover
+                title="Werven aan dagplanning toevoegen"
+                items={werven.filter(w => !w.endDate).map(w => ({
+                  id: w.id,
+                  label: w.klant,
+                  sublabel: w.omschrijving || w.address
+                }))}
+                selectedIds={dailyPool.werven}
+                onConfirm={(ids) => { onAddToPool('werven', ids); setAddWerfPopover(false); }}
+                onCancel={() => setAddWerfPopover(false)}
+              />
+            )}
           </div>
         </div>
 
@@ -254,22 +315,23 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Resources</div>
 
           <div className="bg-blue-900 rounded-lg p-2 mb-2">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-semibold text-blue-200">WERKNEMERS</div>
-              <span className="text-[9px] text-blue-300">📋 Dupliceer voor 2× plannen</span>
-            </div>
+            <div className="text-[10px] font-semibold text-blue-200 mb-2">WERKNEMERS</div>
             <div className="flex flex-col gap-1 max-h-48 overflow-y-auto thin-scroll">
-              {workerInstances.map(w => {
+              {workerInstances.filter(w => dailyPool.workers.has(w.id)).map(w => {
                 const status = workerStatus(w.id, w.instanceKey);
                 const draggable = status !== 'booked';
                 const labelSuffix = status === 'am-only' ? ' (NM vrij)' : status === 'partial' ? ' (partieel)' : '';
                 const opacity = status === 'booked' ? 'opacity-30' : status === 'am-only' ? 'opacity-70' : '';
+                const isSelected = selectedWorkerId === w.id && !w.isDuplicate;
                 return (
                   <div
                     key={`${w.id}-${w.instanceKey}`}
                     draggable={draggable}
                     onDragStart={e => e.dataTransfer.setData('text/plain', `worker:${w.id}:${w.instanceKey}`)}
-                    className={`bg-white/95 rounded px-2 py-1 text-[11px] text-slate-900 ${opacity} flex items-center gap-1 ${draggable ? 'cursor-grab hover:bg-white' : 'cursor-not-allowed'}`}
+                    onClick={() => !w.isDuplicate && setSelectedWorkerId(isSelected ? null : w.id)}
+                    className={`rounded px-2 py-1 text-[11px] flex items-center gap-1 ${
+                      isSelected ? 'bg-blue-200 text-blue-900 ring-2 ring-blue-400' : 'bg-white/95 text-slate-900'
+                    } ${opacity} ${draggable ? 'cursor-grab hover:bg-white' : 'cursor-not-allowed'}`}
                     title={status === 'am-only' ? 'NM nog vrij — sleep om PM toe te wijzen' : ''}
                   >
                     {w.isDuplicate && <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800">×2</span>}
@@ -282,7 +344,7 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                     )}
                     {!w.isDuplicate && (
                       <button
-                        onClick={() => onDuplicate(w.id)}
+                        onClick={(e) => { e.stopPropagation(); onDuplicate(w.id); }}
                         className="text-purple-600 hover:text-purple-800 text-[12px] leading-none"
                         title="Dubbele werknemer aanmaken — werknemer verschijnt nog een keer in de pool"
                       >
@@ -293,25 +355,110 @@ export default function PlanningTab({ werven, workers, machines, onAssign, onRem
                 );
               })}
             </div>
+            {/* +/− toolbar — werknemers in/uit dagplanning */}
+            <div className="flex gap-1.5 mt-2 items-center relative">
+              <button
+                onClick={() => setAddWorkerPopover(true)}
+                className="w-8 h-8 rounded bg-blue-800 hover:bg-blue-700 text-blue-100 text-base font-semibold flex items-center justify-center border border-blue-700 leading-none"
+                title="Werknemers aan dagplanning toevoegen"
+              >
+                +
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedWorkerId) return;
+                  onRemoveFromPool('workers', selectedWorkerId);
+                  setSelectedWorkerId(null);
+                }}
+                disabled={!selectedWorkerId}
+                className="w-8 h-8 rounded bg-blue-800 hover:bg-blue-700 text-blue-100 text-base font-semibold flex items-center justify-center border border-blue-700 disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+                title={selectedWorkerId ? 'Geselecteerde werknemer uit dagplanning halen' : 'Selecteer eerst een werknemer'}
+              >
+                −
+              </button>
+              {selectedWorkerId && (
+                <span className="text-[9px] text-blue-200 italic">
+                  klik − om uit dagplanning te halen
+                </span>
+              )}
+              {addWorkerPopover && (
+                <MultiSelectPopover
+                  title="Werknemers aan dagplanning toevoegen"
+                  items={workers.filter(w => !w.endDate).map(w => ({
+                    id: w.id,
+                    label: w.name,
+                    sublabel: w.function,
+                    badge: w.type === 'subcontractor' ? 'OA' : null
+                  }))}
+                  selectedIds={dailyPool.workers}
+                  onConfirm={(ids) => { onAddToPool('workers', ids); setAddWorkerPopover(false); }}
+                  onCancel={() => setAddWorkerPopover(false)}
+                />
+              )}
+            </div>
           </div>
 
           <div className="bg-red-900 rounded-lg p-2">
             <div className="text-[10px] font-semibold text-red-200 mb-2">MACHINES</div>
             <div className="flex flex-col gap-1 max-h-44 overflow-y-auto thin-scroll">
-              {machines.map(m => {
+              {machines.filter(m => dailyPool.machines.has(m.id)).map(m => {
                 const taken = isMachineAssigned(m.id);
+                const isSelected = selectedMachineId === m.id;
                 return (
                   <div
                     key={m.id}
                     draggable={!taken}
                     onDragStart={e => e.dataTransfer.setData('text/plain', `machine:${m.id}:`)}
-                    className={`bg-white/95 rounded px-2 py-1 text-[11px] text-slate-900 flex justify-between gap-2 ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-grab hover:bg-white'}`}
+                    onClick={() => setSelectedMachineId(isSelected ? null : m.id)}
+                    className={`rounded px-2 py-1 text-[11px] flex justify-between gap-2 ${
+                      isSelected ? 'bg-amber-200 text-amber-900 ring-2 ring-amber-400' : 'bg-white/95 text-slate-900'
+                    } ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-grab hover:bg-white'}`}
                   >
                     <span className="text-slate-500 text-[10px]">{m.group}</span>
                     <span className="font-medium">{m.code}</span>
                   </div>
                 );
               })}
+            </div>
+            {/* +/− toolbar — machines in/uit dagplanning */}
+            <div className="flex gap-1.5 mt-2 items-center relative">
+              <button
+                onClick={() => setAddMachinePopover(true)}
+                className="w-8 h-8 rounded bg-red-800 hover:bg-red-700 text-red-100 text-base font-semibold flex items-center justify-center border border-red-700 leading-none"
+                title="Machines aan dagplanning toevoegen"
+              >
+                +
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedMachineId) return;
+                  onRemoveFromPool('machines', selectedMachineId);
+                  setSelectedMachineId(null);
+                }}
+                disabled={!selectedMachineId}
+                className="w-8 h-8 rounded bg-red-800 hover:bg-red-700 text-red-100 text-base font-semibold flex items-center justify-center border border-red-700 disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+                title={selectedMachineId ? 'Geselecteerde machine uit dagplanning halen' : 'Selecteer eerst een machine'}
+              >
+                −
+              </button>
+              {selectedMachineId && (
+                <span className="text-[9px] text-red-200 italic">
+                  klik − om uit dagplanning te halen
+                </span>
+              )}
+              {addMachinePopover && (
+                <MultiSelectPopover
+                  title="Machines aan dagplanning toevoegen"
+                  items={machines.filter(m => !m.endDate).map(m => ({
+                    id: m.id,
+                    label: m.code,
+                    sublabel: m.group
+                  }))}
+                  selectedIds={dailyPool.machines}
+                  onConfirm={(ids) => { onAddToPool('machines', ids); setAddMachinePopover(false); }}
+                  onCancel={() => setAddMachinePopover(false)}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -490,6 +637,314 @@ function SplitDialog({ dialog, werven, machines, onCancel, onConfirm }) {
             className="text-xs px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
           >
             Splitsen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Add dialogs =====
+
+function AddWerfDialog({ klanten, onCancel, onConfirm }) {
+  const [klantId, setKlantId] = useState(klanten[0]?.id || '');
+  const [omschrijving, setOmschrijving] = useState('');
+  const [address, setAddress] = useState('');
+
+  const canSubmit = klantId && omschrijving.trim() && address.trim();
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-[460px] max-w-[95vw] p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-base font-semibold">Nieuwe werf toevoegen</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Werf voor een bestaande klant aanmaken</p>
+          </div>
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 mb-4">
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Klant <span className="text-red-500">*</span></label>
+            <select
+              value={klantId}
+              onChange={e => setKlantId(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+            >
+              {klanten.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Werf naam / omschrijving <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={omschrijving}
+              onChange={e => setOmschrijving(e.target.value)}
+              placeholder="bv. Onderhoud patrimonium 543, Kaaimuur Boudewijnkanaal..."
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Adres / locatie <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder="bv. Aalter, Roeselare, Antwerpen Hoboken..."
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="text-xs px-4 py-2 rounded border border-slate-300 hover:bg-slate-50">Annuleren</button>
+          <button
+            onClick={() => onConfirm({ klantId, omschrijving: omschrijving.trim(), address: address.trim() })}
+            disabled={!canSubmit}
+            className="text-xs px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            Werf aanmaken
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddWorkerDialog({ onCancel, onConfirm }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('employee');
+  const [func, setFunc] = useState('Bestuurder');
+  const [uurloon1, setUurloon1] = useState(25);
+  const [uurloon2, setUurloon2] = useState(37.5);
+  const [oaTarief, setOaTarief] = useState(50);
+  const [oaTariefOver, setOaTariefOver] = useState(60);
+
+  const isOA = type === 'subcontractor';
+  const canSubmit = name.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-[480px] max-w-[95vw] p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-base font-semibold">Nieuwe werknemer toevoegen</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Werknemer of onderaannemer aanmaken</p>
+          </div>
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Naam <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value.toUpperCase())}
+              placeholder="bv. JANSSENS PIETER"
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded font-medium"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Type</label>
+            <select
+              value={type}
+              onChange={e => setType(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+            >
+              <option value="employee">Werknemer</option>
+              <option value="subcontractor">Onderaannemer (OA)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Functie</label>
+            <select
+              value={func}
+              onChange={e => setFunc(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+            >
+              <option>Bestuurder</option>
+              <option>Arbeider</option>
+              <option>Chauffeur</option>
+              <option>Voorman</option>
+              <option>Magazijn</option>
+            </select>
+          </div>
+
+          {!isOA && (
+            <>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Uurloon 1 (regulier)</label>
+                <input
+                  type="number" step="0.5"
+                  value={uurloon1}
+                  onChange={e => setUurloon1(parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Uurloon 2 (overuren)</label>
+                <input
+                  type="number" step="0.5"
+                  value={uurloon2}
+                  onChange={e => setUurloon2(parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+                />
+              </div>
+            </>
+          )}
+
+          {isOA && (
+            <>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">OA-tarief regulier</label>
+                <input
+                  type="number" step="1"
+                  value={oaTarief}
+                  onChange={e => setOaTarief(parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">OA-tarief overuren</label>
+                <input
+                  type="number" step="1"
+                  value={oaTariefOver}
+                  onChange={e => setOaTariefOver(parseFloat(e.target.value) || 0)}
+                  className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="text-xs px-4 py-2 rounded border border-slate-300 hover:bg-slate-50">Annuleren</button>
+          <button
+            onClick={() => onConfirm(isOA
+              ? { name: name.trim(), type, function: func, uurloon1: 0, uurloon2: 0, oaTarief, oaTariefOver }
+              : { name: name.trim(), type, function: func, uurloon1, uurloon2 }
+            )}
+            disabled={!canSubmit}
+            className="text-xs px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            Werknemer aanmaken
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddMachineDialog({ onCancel, onConfirm }) {
+  const [code, setCode] = useState('');
+  const [group, setGroup] = useState('Bandenkraan');
+  const [description, setDescription] = useState('');
+  const [rate, setRate] = useState(85);
+  const [color, setColor] = useState('#3B82F6');
+
+  const colorPresets = [
+    { c: '#3B82F6', label: 'Blauw' },
+    { c: '#F59E0B', label: 'Oranje' },
+    { c: '#10B981', label: 'Groen' },
+    { c: '#EF4444', label: 'Rood' },
+    { c: '#8B5CF6', label: 'Paars' },
+    { c: '#EC4899', label: 'Roze' },
+    { c: '#6B7280', label: 'Grijs' }
+  ];
+
+  const canSubmit = code.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-[480px] max-w-[95vw] p-5">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-base font-semibold">Nieuwe machine toevoegen</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Machine in het wagenpark registreren</p>
+          </div>
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Machine code <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="bv. ZX140.13 WD, Bobcat 9, Sen 835.44"
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded font-medium"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Groep</label>
+            <select
+              value={group}
+              onChange={e => setGroup(e.target.value)}
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+            >
+              <option>Bandenkraan</option>
+              <option>Bandenlader</option>
+              <option>Bobcat</option>
+              <option>Borstelmachine</option>
+              <option>Dieplader</option>
+              <option>Dumper</option>
+              <option>Minigraafmachine</option>
+              <option>Rupskraan</option>
+              <option>Tractor</option>
+              <option>Vrachtwagens</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Tarief (€/u)</label>
+            <input
+              type="number" step="1"
+              value={rate}
+              onChange={e => setRate(parseFloat(e.target.value) || 0)}
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Beschrijving</label>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="optioneel — bv. Hitachi ZX140 W-6 wheeled excavator"
+              className="w-full h-8 px-2 text-xs border border-slate-300 rounded"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Kleur (voor planning pill)</label>
+            <div className="flex gap-1.5">
+              {colorPresets.map(p => (
+                <button
+                  key={p.c}
+                  type="button"
+                  onClick={() => setColor(p.c)}
+                  className={`w-7 h-7 rounded ${color === p.c ? 'ring-2 ring-offset-1 ring-slate-700' : 'ring-1 ring-slate-300'}`}
+                  style={{ backgroundColor: p.c }}
+                  title={p.label}
+                />
+              ))}
+            </div>
+            <div className="mt-2 inline-flex items-center gap-2 px-2 py-0.5 bg-white border border-slate-200 rounded-full text-[10px]">
+              <span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
+              {code || 'voorbeeld'}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="text-xs px-4 py-2 rounded border border-slate-300 hover:bg-slate-50">Annuleren</button>
+          <button
+            onClick={() => onConfirm({ code: code.trim(), group, description: description.trim(), rate, color })}
+            disabled={!canSubmit}
+            className="text-xs px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            Machine aanmaken
           </button>
         </div>
       </div>

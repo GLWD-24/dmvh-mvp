@@ -16,25 +16,26 @@ export const seedKlanten = [
 // per klant. A klant can have multiple werven (e.g. ARTES DEPRET has 2, D E C has 6).
 // `omschrijving` = optional project descriptor (e.g. "Onderhoud patrimonium 543",
 // "Zeebrugge kaaimuur boudewijnkanaal", "Antwerpen", "Brugge").
+// `startDate` = when werf was opened. `endDate` set when closed for soft-delete + reporting.
 export const seedWerven = [
   // AVEVE AALTER
-  { id: 'aveve-1', klantId: 'k1', omschrijving: 'Aalter', address: 'Aalter', status: 'open', assignments: [] },
+  { id: 'aveve-1', klantId: 'k1', omschrijving: 'Aalter', address: 'Aalter', status: 'open', startDate: '01/03/2026', endDate: null, assignments: [] },
   // AGRO ENERGIEK
-  { id: 'agro-1', klantId: 'k2', omschrijving: 'Zomergem', address: 'Zomergem', status: 'open', assignments: [] },
+  { id: 'agro-1', klantId: 'k2', omschrijving: 'Zomergem', address: 'Zomergem', status: 'open', startDate: '15/02/2026', endDate: null, assignments: [] },
   // BESIX
-  { id: 'besix-1', klantId: 'k3', omschrijving: 'Winterdijk', address: 'Winterdijk', status: 'open', assignments: [] },
+  { id: 'besix-1', klantId: 'k3', omschrijving: 'Winterdijk', address: 'Winterdijk', status: 'open', startDate: '20/01/2026', endDate: null, assignments: [] },
   // ASWEBO ROESELARE — multiple werven illustrated like real planning
-  { id: 'aswebo-r-1', klantId: 'k4', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', assignments: [] },
-  { id: 'aswebo-r-2', klantId: 'k4', omschrijving: 'Heist kaaimuur', address: 'Heist', status: 'open', assignments: [] },
+  { id: 'aswebo-r-1', klantId: 'k4', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/03/2026', endDate: null, assignments: [] },
+  { id: 'aswebo-r-2', klantId: 'k4', omschrijving: 'Heist kaaimuur', address: 'Heist', status: 'open', startDate: '05/04/2026', endDate: null, assignments: [] },
   // ASWEBO ZEEBRUGGE
-  { id: 'aswebo-z-1', klantId: 'k5', omschrijving: 'Zeebrugge', address: 'Zeebrugge', status: 'open', assignments: [] },
+  { id: 'aswebo-z-1', klantId: 'k5', omschrijving: 'Zeebrugge', address: 'Zeebrugge', status: 'open', startDate: '01/04/2026', endDate: null, assignments: [] },
   // KESTELEYN Charles
-  { id: 'kest-1', klantId: 'k6', omschrijving: 'Gent Ragnar laden', address: 'Gent', status: 'open', assignments: [] },
+  { id: 'kest-1', klantId: 'k6', omschrijving: 'Gent Ragnar laden', address: 'Gent', status: 'open', startDate: '15/03/2026', endDate: null, assignments: [] },
   // HYE — 2 werven
-  { id: 'hye-1', klantId: 'k7', omschrijving: 'Antwerpen', address: 'Antwerpen', status: 'open', assignments: [] },
-  { id: 'hye-2', klantId: 'k7', omschrijving: 'Onderhoud patrimonium 543', address: 'Brugge', status: 'open', assignments: [] },
+  { id: 'hye-1', klantId: 'k7', omschrijving: 'Antwerpen', address: 'Antwerpen', status: 'open', startDate: '01/02/2026', endDate: null, assignments: [] },
+  { id: 'hye-2', klantId: 'k7', omschrijving: 'Onderhoud patrimonium 543', address: 'Brugge', status: 'open', startDate: '20/03/2026', endDate: null, assignments: [] },
   // JONCKHEERE
-  { id: 'jonck-1', klantId: 'k8', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', assignments: [] }
+  { id: 'jonck-1', klantId: 'k8', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/04/2026', endDate: null, assignments: [] }
 ];
 
 export const seedWorkers = [
