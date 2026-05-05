@@ -178,6 +178,53 @@ export default function App() {
     showToast('Uit dagplanning gehaald');
   }, []);
 
+  // Create-from-planning handlers: create master data record + auto-add to dailyPool
+  const handleCreateWerfFromPlanning = useCallback((data) => {
+    const today = new Date(2026, 4, 4);
+    const startStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const id = 'w-' + Date.now();
+    const newWerf = {
+      id,
+      klantId: data.klantId,
+      omschrijving: data.omschrijving,
+      address: data.address,
+      status: 'open',
+      startDate: startStr,
+      endDate: null,
+      assignments: []
+    };
+    setWerven(prev => [...prev, newWerf]);
+    setDailyPool(prev => ({ ...prev, werven: new Set([...prev.werven, id]) }));
+    showToast('Werf aangemaakt en toegevoegd aan dagplanning');
+  }, []);
+
+  const handleCreateWorkerFromPlanning = useCallback((data) => {
+    const today = new Date(2026, 4, 4);
+    const hireStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const id = 'w-' + Date.now();
+    const newWorker = {
+      id,
+      hireDate: hireStr,
+      endDate: null,
+      ...data
+    };
+    setWorkers(prev => [...prev, newWorker]);
+    setDailyPool(prev => ({ ...prev, workers: new Set([...prev.workers, id]) }));
+    showToast(`${data.type === 'subcontractor' ? 'Onderaannemer' : 'Werknemer'} aangemaakt en toegevoegd`);
+  }, []);
+
+  const handleCreateMachineFromPlanning = useCallback((data) => {
+    const id = 'm-' + Date.now();
+    const newMachine = {
+      id,
+      endDate: null,
+      ...data
+    };
+    setMachines(prev => [...prev, newMachine]);
+    setDailyPool(prev => ({ ...prev, machines: new Set([...prev.machines, id]) }));
+    showToast('Machine aangemaakt en toegevoegd aan dagplanning');
+  }, []);
+
   const handleSplit = useCallback((source, payload) => {
     // source: { sourceWerfId, sourceAssignmentId, workerId, machineId }
     // payload: { pmWerfId, amHours, pmHours, pmMachineId }
@@ -540,6 +587,9 @@ export default function App() {
                   onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
                   onDuplicate={handleDuplicate}
                   onUpdateAssignment={handleUpdateAssignment}
+                  onCreateWerf={handleCreateWerfFromPlanning}
+                  onCreateWorker={handleCreateWorkerFromPlanning}
+                  onCreateMachine={handleCreateMachineFromPlanning}
                 />
               )}
               {tab === 'inbox' && (

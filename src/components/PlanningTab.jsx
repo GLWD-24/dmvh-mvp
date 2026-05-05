@@ -22,7 +22,8 @@ const renderName = (workerName, half) => {
 export default function PlanningTab({
   werven, klanten, workers, machines,
   dailyPool, onAddToPool, onRemoveFromPool,
-  onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment
+  onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment,
+  onCreateWerf, onCreateWorker, onCreateMachine
 }) {
   const [splitDialog, setSplitDialog] = useState(null);
   const [currentDate, setCurrentDate] = useState(todayDate());
@@ -38,6 +39,11 @@ export default function PlanningTab({
   const [addWerfPopover, setAddWerfPopover] = useState(false);
   const [addWorkerPopover, setAddWorkerPopover] = useState(false);
   const [addMachinePopover, setAddMachinePopover] = useState(false);
+
+  // "Create new" dialog state — triggered from inside the popover
+  const [createWerfDialog, setCreateWerfDialog] = useState(false);
+  const [createWorkerDialog, setCreateWorkerDialog] = useState(false);
+  const [createMachineDialog, setCreateMachineDialog] = useState(false);
 
   const calendarRef = useRef(null);
 
@@ -306,6 +312,8 @@ export default function PlanningTab({
                 selectedIds={dailyPool.werven}
                 onConfirm={(ids) => { onAddToPool('werven', ids); setAddWerfPopover(false); }}
                 onCancel={() => setAddWerfPopover(false)}
+                onCreateNew={() => { setAddWerfPopover(false); setCreateWerfDialog(true); }}
+                createNewLabel="+ Nieuwe werf aanmaken"
               />
             )}
           </div>
@@ -393,6 +401,8 @@ export default function PlanningTab({
                   selectedIds={dailyPool.workers}
                   onConfirm={(ids) => { onAddToPool('workers', ids); setAddWorkerPopover(false); }}
                   onCancel={() => setAddWorkerPopover(false)}
+                  onCreateNew={() => { setAddWorkerPopover(false); setCreateWorkerDialog(true); }}
+                  createNewLabel="+ Nieuwe werknemer aanmaken"
                 />
               )}
             </div>
@@ -457,6 +467,8 @@ export default function PlanningTab({
                   selectedIds={dailyPool.machines}
                   onConfirm={(ids) => { onAddToPool('machines', ids); setAddMachinePopover(false); }}
                   onCancel={() => setAddMachinePopover(false)}
+                  onCreateNew={() => { setAddMachinePopover(false); setCreateMachineDialog(true); }}
+                  createNewLabel="+ Nieuwe machine aanmaken"
                 />
               )}
             </div>
@@ -473,6 +485,37 @@ export default function PlanningTab({
           onConfirm={(payload) => {
             onSplit(splitDialog, payload);
             setSplitDialog(null);
+          }}
+        />
+      )}
+
+      {createWerfDialog && (
+        <AddWerfDialog
+          klanten={klanten}
+          onCancel={() => setCreateWerfDialog(false)}
+          onConfirm={(data) => {
+            onCreateWerf(data);
+            setCreateWerfDialog(false);
+          }}
+        />
+      )}
+
+      {createWorkerDialog && (
+        <AddWorkerDialog
+          onCancel={() => setCreateWorkerDialog(false)}
+          onConfirm={(data) => {
+            onCreateWorker(data);
+            setCreateWorkerDialog(false);
+          }}
+        />
+      )}
+
+      {createMachineDialog && (
+        <AddMachineDialog
+          onCancel={() => setCreateMachineDialog(false)}
+          onConfirm={(data) => {
+            onCreateMachine(data);
+            setCreateMachineDialog(false);
           }}
         />
       )}
