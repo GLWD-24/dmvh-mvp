@@ -720,7 +720,7 @@ export default function PlanningTab({
       )}
 
       {printPreview && (
-        <PrintView date={currentDate} werven={werven} workers={workers} machines={machines} />
+        <PrintView date={currentDate} werven={werven} workers={workers} machines={machines} artikelen={artikelen} />
       )}
     </div>
   );
@@ -1195,7 +1195,7 @@ function AddMachineDialog({ onCancel, onConfirm }) {
 }
 
 // Print view — A4 layout matching USEIT2000 planning document
-function PrintView({ date, werven, workers, machines }) {
+function PrintView({ date, werven, workers, machines, artikelen = [] }) {
   // Group werven by klant
   const klantenGroups = {};
   werven.forEach(w => {
@@ -1231,11 +1231,13 @@ function PrintView({ date, werven, workers, machines }) {
   })();
   const printedOn = formatDate(new Date());
 
-  // Helper: render assignment in 3-column row format (werknemer | machine | opmerking)
+  // Helper: render assignment in row format (werknemer | machine | extra1 | extra2 | opmerking)
   const renderAssignment = (a) => {
     const isHemzelf = a.workerId === 'HEMZELF';
     const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
     const mc = machines.find(x => x.id === a.machineId);
+    const ex1 = a.extra1Id ? artikelen.find(x => x.id === a.extra1Id) : null;
+    const ex2 = a.extra2Id ? artikelen.find(x => x.id === a.extra2Id) : null;
     const half = a.half || 'full';
     const isDup = a.instanceKey && a.instanceKey !== 'main';
     const lowercaseName = half === 'pm';
@@ -1247,6 +1249,8 @@ function PrintView({ date, werven, workers, machines }) {
           : '',
       machine: mc?.code || '',
       machineColor: mc?.color || '#3B82F6',
+      extra1: ex1?.code || '',
+      extra2: ex2?.code || '',
       opmerking: a.opmerking || '',
       isDup
     };
@@ -1278,14 +1282,17 @@ function PrintView({ date, werven, workers, machines }) {
         }
         .useit-row {
           display: grid;
-          grid-template-columns: 32px 1fr 1fr 1fr;
+          grid-template-columns: 24px 1.4fr 1.2fr 0.7fr 0.7fr 1.2fr;
           font-size: 11px;
           line-height: 1.4;
           padding: 1px 0;
+          gap: 6px;
         }
-        .useit-row .indent { width: 32px; }
+        .useit-row .indent { width: 24px; }
         .useit-machine { color: #1e40af; }
         .useit-machine.colored { color: #b45309; }
+        .useit-artikel { color: #b45309; font-weight: 500; font-size: 10px; }
+        .useit-werfnota { font-style: italic; color: #475569; font-size: 10px; padding-left: 32px; padding-bottom: 2px; }
       `}</style>
 
       <div className="max-w-[190mm] mx-auto" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
@@ -1311,6 +1318,9 @@ function PrintView({ date, werven, workers, machines }) {
                 return (
                   <div key={w.id}>
                     <div className="useit-klant">{headerLabel}</div>
+                    {w.werfNota && (
+                      <div className="useit-werfnota">⚑ {w.werfNota}</div>
+                    )}
                     {w.assignments.map(a => {
                       const r = renderAssignment(a);
                       return (
@@ -1321,6 +1331,8 @@ function PrintView({ date, werven, workers, machines }) {
                             {r.isDup && <span className="text-[9px] text-purple-700 ml-1">×2</span>}
                           </div>
                           <div className={`useit-machine ${r.machineColor !== '#3B82F6' ? 'colored' : ''}`}>{r.machine}</div>
+                          <div className="useit-artikel">{r.extra1}</div>
+                          <div className="useit-artikel">{r.extra2}</div>
                           <div className="text-slate-700">{r.opmerking}</div>
                         </div>
                       );
