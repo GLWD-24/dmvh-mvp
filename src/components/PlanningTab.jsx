@@ -281,6 +281,9 @@ export default function PlanningTab({
                         const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : null;
                         const canSplit = (wk || isHemzelf) && half === 'full';
                         const isDup = a.instanceKey && a.instanceKey !== 'main';
+                        // OPHALEN: machine staat bij klant zonder werknemer en zonder HEMZELF.
+                        // Auto-afgeleid — geen handmatige toggle nodig.
+                        const isOphalen = !!mc && !wk && !isHemzelf;
 
                         return (
                           <tr key={a.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 group">
@@ -396,10 +399,10 @@ export default function PlanningTab({
                             </td>
 
                             {/* Opmerking */}
-                            <td className={`px-2 py-1.5 align-top border-l border-slate-100 relative ${a.tePhalen ? 'bg-orange-50' : ''}`}>
+                            <td className={`px-2 py-1.5 align-top border-l border-slate-100 relative ${isOphalen ? 'bg-orange-50' : ''}`}>
                               <div className="flex items-center gap-1">
-                                {a.tePhalen && (
-                                  <span className="text-[8px] font-bold px-1 rounded bg-orange-200 text-orange-900 shrink-0" title="Machine moet opgehaald worden">OPHALEN</span>
+                                {isOphalen && (
+                                  <span className="text-[8px] font-bold px-1 rounded bg-orange-200 text-orange-900 shrink-0" title="Machine staat bij klant zonder werknemer — moet opgehaald worden">OPHALEN</span>
                                 )}
                                 <input
                                   type="text"
@@ -408,13 +411,6 @@ export default function PlanningTab({
                                   placeholder="—"
                                   className="flex-1 text-[10px] bg-transparent border-0 outline-none focus:bg-white focus:px-1 focus:rounded text-slate-700 placeholder-slate-300 min-w-0"
                                 />
-                                <button
-                                  onClick={() => onUpdateAssignment(a.id, { tePhalen: !a.tePhalen })}
-                                  className={`shrink-0 transition text-[12px] leading-none ${a.tePhalen ? 'text-orange-600 hover:text-orange-800' : 'text-slate-300 hover:text-orange-500 opacity-0 group-hover:opacity-100'}`}
-                                  title={a.tePhalen ? 'Niet meer markeren als op te halen' : 'Markeer als "machine moet opgehaald worden"'}
-                                >
-                                  🚛
-                                </button>
                                 <button
                                   onClick={() => onRemove(a.id)}
                                   className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0"
@@ -1291,7 +1287,8 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
       extra1: ex1?.code || '',
       extra2: ex2?.code || '',
       opmerking: a.opmerking || '',
-      tePhalen: !!a.tePhalen,
+      // OPHALEN automatisch afgeleid: machine zonder werknemer en zonder HEMZELF
+      tePhalen: !!mc && !wk && !isHemzelf,
       isDup
     };
   };

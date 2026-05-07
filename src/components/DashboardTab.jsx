@@ -50,11 +50,14 @@ export default function DashboardTab({ klanten, werven, workers, machines, werkb
   const activeMachines = machines.filter(m => m.active !== false).length;
 
   // "Te ophalen" — machines die bij een klant achtergelaten zijn en moeten opgehaald worden.
-  // Bron: assignments met tePhalen:true. Aggregeer per machine met klant/werf-context.
+  // Auto-afgeleid: een assignment heeft een machine maar geen werknemer en geen HEMZELF.
   const teOphalen = [];
   werven.forEach(w => {
     (w.assignments || []).forEach(a => {
-      if (a.tePhalen) {
+      const isHemzelf = a.workerId === 'HEMZELF';
+      const hasWorker = a.workerId && !isHemzelf;
+      const hasMachine = !!a.machineId;
+      if (hasMachine && !hasWorker && !isHemzelf) {
         const mc = machines.find(x => x.id === a.machineId);
         teOphalen.push({
           assignmentId: a.id,
@@ -85,44 +88,6 @@ export default function DashboardTab({ klanten, werven, workers, machines, werkb
         <h2 className="text-[22px] font-semibold text-slate-900 mb-1">Dashboard</h2>
         <p className="text-[13px] text-slate-500">Overzicht voor vandaag — donderdag 7 mei 2026</p>
       </div>
-
-      {/* Te ophalen — alleen tonen als er items zijn */}
-      {teOphalen.length > 0 && (
-        <div className="mb-6 bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-orange-200 flex items-center justify-between bg-orange-100/60">
-            <div className="flex items-center gap-2">
-              <span className="text-orange-700 text-base">🚛</span>
-              <h3 className="text-[13px] font-semibold text-orange-900 uppercase tracking-wide">Te ophalen</h3>
-              <span className="text-[11px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium">{teOphalen.length}</span>
-            </div>
-            <button
-              onClick={() => onNavigate('planning')}
-              className="text-[11px] text-orange-700 hover:text-orange-900 font-medium"
-            >
-              Ga naar planning →
-            </button>
-          </div>
-          <ul className="divide-y divide-orange-100">
-            {teOphalen.map(item => (
-              <li key={item.assignmentId} className="px-4 py-2.5 flex items-center justify-between text-[12px] hover:bg-orange-50">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-900 truncate">
-                    {item.klant} {item.omschrijving && <span className="text-slate-500">— {item.omschrijving}</span>}
-                  </div>
-                  <div className="text-slate-600 text-[11px]">
-                    <span className="font-medium text-orange-800">{item.machineCode}</span>
-                    {item.machineGroup && <span className="text-slate-500"> · {item.machineGroup}</span>}
-                    {item.opmerking && <span className="text-slate-500"> · {item.opmerking}</span>}
-                  </div>
-                </div>
-                <span className="shrink-0 ml-3 text-[10px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium uppercase">
-                  Niet factureren
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-4 gap-3 mb-6">
@@ -246,6 +211,44 @@ export default function DashboardTab({ klanten, werven, workers, machines, werkb
           ))}
         </div>
       </SectionCard>
+
+      {/* Te ophalen — alleen tonen als er items zijn */}
+      {teOphalen.length > 0 && (
+        <div className="mt-6 bg-orange-50 border border-orange-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-orange-200 flex items-center justify-between bg-orange-100/60">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-700 text-base">🚛</span>
+              <h3 className="text-[13px] font-semibold text-orange-900 uppercase tracking-wide">Te ophalen</h3>
+              <span className="text-[11px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium">{teOphalen.length}</span>
+            </div>
+            <button
+              onClick={() => onNavigate('planning')}
+              className="text-[11px] text-orange-700 hover:text-orange-900 font-medium"
+            >
+              Ga naar planning →
+            </button>
+          </div>
+          <ul className="divide-y divide-orange-100">
+            {teOphalen.map(item => (
+              <li key={item.assignmentId} className="px-4 py-2.5 flex items-center justify-between text-[12px] hover:bg-orange-50">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-slate-900 truncate">
+                    {item.klant} {item.omschrijving && <span className="text-slate-500">— {item.omschrijving}</span>}
+                  </div>
+                  <div className="text-slate-600 text-[11px]">
+                    <span className="font-medium text-orange-800">{item.machineCode}</span>
+                    {item.machineGroup && <span className="text-slate-500"> · {item.machineGroup}</span>}
+                    {item.opmerking && <span className="text-slate-500"> · {item.opmerking}</span>}
+                  </div>
+                </div>
+                <span className="shrink-0 ml-3 text-[10px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium uppercase">
+                  Niet factureren
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
