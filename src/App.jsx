@@ -1,5 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices } from './data/seed.js';
+import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices, seedBedrijfsgegevens, seedServices } from './data/seed.js';
+import AppShell from './components/AppShell.jsx';
+import DashboardTab from './components/DashboardTab.jsx';
+import BedrijfsgegevensTab from './components/BedrijfsgegevensTab.jsx';
+import DienstenTab from './components/DienstenTab.jsx';
 import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
 import FacturatieTab from './components/FacturatieTab.jsx';
@@ -16,6 +20,8 @@ export default function App() {
   const [werven, setWerven] = useState(seedWerven.map(w => ({ ...w, assignments: w.assignments || [] })));
   const [workers, setWorkers] = useState(seedWorkers);
   const [machines, setMachines] = useState(seedMachines);
+  const [services, setServices] = useState(seedServices);
+  const [bedrijf, setBedrijf] = useState(seedBedrijfsgegevens);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [incomingInvoices] = useState(seedIncomingInvoices);
   const [proposals, setProposals] = useState([]);
@@ -26,10 +32,11 @@ export default function App() {
     ...w,
     klant: klantenById[w.klantId]?.name || w.klant || '—'
   }));
-  const [tab, setTab] = useState('planning');
+  const [tab, setTab] = useState('dashboard');
   const [toast, setToast] = useState(null);
   const [status, setStatus] = useState({ text: 'Ready', kind: 'info' });
   const [mobile, setMobile] = useState({ screen: 'today', currentWerkbon: null });
+  const [showMobile, setShowMobile] = useState(false);
 
   const showToast = (message, kind = 'success') => {
     setToast({ message, kind });
@@ -400,6 +407,26 @@ export default function App() {
     showToast('Machine verwijderd', 'warn');
   };
 
+  // Services / diensten CRUD (manuren, transport, etc.)
+  const serviceSave = (id, patch) => {
+    setServices(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
+    showToast('Dienst opgeslagen');
+  };
+  const serviceAdd = (newService) => {
+    setServices(prev => [...prev, newService]);
+    showToast('Nieuwe dienst toegevoegd');
+  };
+  const serviceDelete = (id) => {
+    setServices(prev => prev.filter(s => s.id !== id));
+    showToast('Dienst verwijderd', 'warn');
+  };
+
+  // Bedrijfsgegevens (settings)
+  const bedrijfSave = (newBedrijf) => {
+    setBedrijf(newBedrijf);
+    showToast('Bedrijfsgegevens opgeslagen');
+  };
+
   // Werven CRUD (master data tab)
   const werfSave = (id, patch) => {
     setWerven(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
@@ -512,127 +539,119 @@ export default function App() {
     warn: 'bg-amber-50 text-amber-700'
   };
 
+  // Demo flow definitions for sidebar
+  const demoFlowItems = [
+    { label: 'Plan Monday', onClick: () => runFlow(1) },
+    { label: 'Mobile werkbon', onClick: () => { setShowMobile(true); runFlow(2); } },
+    { label: 'Approve werkbon', onClick: () => runFlow(3) },
+    { label: 'Invoice PDF', onClick: () => runFlow(4) },
+    { label: 'Edit klant', onClick: () => runFlow(5) }
+  ];
+
+  // Badges for sidebar items
+  const badges = {
+    inbox: submittedCount
+  };
+
+  // Render content based on active tab
+  const renderContent = () => {
+    switch (tab) {
+      case 'dashboard':
+        return (
+          <DashboardTab
+            klanten={klanten}
+            werven={decoratedWerven}
+            workers={workers}
+            machines={machines}
+            werkbonnen={werkbonnen}
+            proposals={proposals}
+            onNavigate={setTab}
+          />
+        );
+      case 'planning':
+        return (
+          <PlanningTab
+            werven={decoratedWerven} klanten={klanten} workers={workers} machines={machines}
+            dailyPool={dailyPool}
+            onAddToPool={handleAddToPool}
+            onRemoveFromPool={handleRemoveFromPool}
+            onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
+            onDuplicate={handleDuplicate}
+            onUpdateAssignment={handleUpdateAssignment}
+            onCreateWerf={handleCreateWerfFromPlanning}
+            onCreateWorker={handleCreateWorkerFromPlanning}
+            onCreateMachine={handleCreateMachineFromPlanning}
+          />
+        );
+      case 'inbox':
+        return <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />;
+      case 'uurrooster':
+        return (
+          <UurroosterTab
+            werkbonnen={werkbonnen}
+            workers={workers}
+            machines={machines}
+            klanten={klanten}
+            incomingInvoices={incomingInvoices}
+            onUpdate={handleWerkbonUpdate}
+          />
+        );
+      case 'invoice':
+        return (
+          <FacturatieTab
+            klanten={klanten}
+            werkbonnen={werkbonnen}
+            proposals={proposals}
+            onCreate={proposalCreate}
+            onSend={proposalSend}
+            onApprove={proposalApprove}
+            onReject={proposalReject}
+            onConvertToInvoice={proposalConvert}
+            onReopen={proposalReopen}
+          />
+        );
+      case 'klanten':
+        return <KlantenTab klanten={klanten} werven={werven} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />;
+      case 'werven':
+        return <WervenTab werven={werven} klanten={klanten} onSave={werfSave} onAdd={werfAdd} onDelete={werfDelete} />;
+      case 'werknemers':
+        return <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} />;
+      case 'machines':
+        return <MachinesTab machines={machines} onSave={machineSave} onAdd={machineAdd} onDelete={machineDelete} />;
+      case 'diensten':
+        return <DienstenTab services={services} onSave={serviceSave} onAdd={serviceAdd} onDelete={serviceDelete} />;
+      case 'bedrijf':
+        return <BedrijfsgegevensTab bedrijf={bedrijf} onSave={bedrijfSave} />;
+      default:
+        return <div className="p-6 text-slate-400">Onbekend scherm</div>;
+    }
+  };
+
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-7xl mx-auto">
-        <header className="mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-900 text-white flex items-center justify-center font-bold">DV</div>
-            <div>
-              <h1 className="text-lg font-semibold">USEIT2026</h1>
-              <p className="text-xs text-slate-500">Demaecker &amp; Vanhaecke — clickable MVP prototype</p>
-            </div>
-          </div>
-        </header>
+    <>
+      <AppShell
+        activeTab={tab}
+        onTabChange={setTab}
+        badges={badges}
+        demoFlow={demoFlowItems}
+        statusBadge={status.text !== 'Ready' ? { text: status.text, kind: status.kind } : null}
+      >
+        {renderContent()}
+      </AppShell>
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs text-slate-500 mr-1">Demo flow</span>
-          {[1,2,3,4,5].map(n => (
+      {/* Mobile phone — verstopt achter demo, opent als overlay rechtsonder */}
+      {showMobile && (
+        <div className="fixed bottom-4 right-4 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100 border-b border-slate-200">
+            <span className="text-[10px] uppercase tracking-wider font-medium text-slate-600">Operator app — demo</span>
             <button
-              key={n}
-              onClick={() => runFlow(n)}
-              className="text-xs px-3 py-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50"
+              onClick={() => setShowMobile(false)}
+              className="text-slate-400 hover:text-slate-700 text-xs px-1.5"
+              title="Sluiten"
             >
-              {['1. Plan Monday', '2. Mobile werkbon', '3. Approve', '4. Invoice PDF', '5. Edit klant'][n-1]}
+              ✕
             </button>
-          ))}
-          <span className={`ml-auto text-xs px-3 py-1 rounded-full ${statusStyles[status.kind]}`}>
-            {status.text}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] gap-3">
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col min-h-[640px]">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-50 overflow-x-auto">
-              <div className="flex gap-1 shrink-0">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-              </div>
-              <span className="text-xs text-slate-500 shrink-0">Planner — D&amp;V</span>
-              <nav className="ml-auto flex gap-1 shrink-0">
-                {[
-                  { id: 'planning', label: 'Planning' },
-                  { id: 'inbox', label: 'Werkbonnen', badge: submittedCount },
-                  { id: 'uurrooster', label: 'Uurrooster' },
-                  { id: 'invoice', label: 'Facturatie' },
-                  { id: 'klanten', label: 'Klanten' },
-                  { id: 'werven', label: 'Werven' },
-                  { id: 'werknemers', label: 'Werknemers' },
-                  { id: 'machines', label: 'Machines' }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`text-xs px-3 py-1 rounded ${tab === t.id ? 'bg-white border border-slate-200 text-slate-900 font-medium' : 'text-slate-500 hover:text-slate-800'}`}
-                  >
-                    {t.label}
-                    {t.badge > 0 && (
-                      <span className="ml-1 inline-block bg-red-100 text-red-700 text-[9px] px-1.5 py-0.5 rounded-full">
-                        {t.badge}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </nav>
-            </div>
-
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {tab === 'planning' && (
-                <PlanningTab
-                  werven={decoratedWerven} klanten={klanten} workers={workers} machines={machines}
-                  dailyPool={dailyPool}
-                  onAddToPool={handleAddToPool}
-                  onRemoveFromPool={handleRemoveFromPool}
-                  onAssign={handleAssign} onRemove={handleRemove} onSplit={handleSplit}
-                  onDuplicate={handleDuplicate}
-                  onUpdateAssignment={handleUpdateAssignment}
-                  onCreateWerf={handleCreateWerfFromPlanning}
-                  onCreateWorker={handleCreateWorkerFromPlanning}
-                  onCreateMachine={handleCreateMachineFromPlanning}
-                />
-              )}
-              {tab === 'inbox' && (
-                <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />
-              )}
-              {tab === 'uurrooster' && (
-                <UurroosterTab
-                  werkbonnen={werkbonnen}
-                  workers={workers}
-                  machines={machines}
-                  klanten={klanten}
-                  incomingInvoices={incomingInvoices}
-                  onUpdate={handleWerkbonUpdate}
-                />
-              )}
-              {tab === 'invoice' && (
-                <FacturatieTab
-                  klanten={klanten}
-                  werkbonnen={werkbonnen}
-                  proposals={proposals}
-                  onCreate={proposalCreate}
-                  onSend={proposalSend}
-                  onApprove={proposalApprove}
-                  onReject={proposalReject}
-                  onConvertToInvoice={proposalConvert}
-                  onReopen={proposalReopen}
-                />
-              )}
-              {tab === 'klanten' && (
-                <KlantenTab klanten={klanten} werven={werven} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />
-              )}
-              {tab === 'werven' && (
-                <WervenTab werven={werven} klanten={klanten} onSave={werfSave} onAdd={werfAdd} onDelete={werfDelete} />
-              )}
-              {tab === 'werknemers' && (
-                <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} />
-              )}
-              {tab === 'machines' && (
-                <MachinesTab machines={machines} onSave={machineSave} onAdd={machineAdd} onDelete={machineDelete} />
-              )}
-            </div>
           </div>
-
           <MobilePhone
             state={mobile}
             werven={decoratedWerven} workers={workers} machines={machines}
@@ -641,13 +660,9 @@ export default function App() {
             onReset={() => setMobile({ screen: 'today', currentWerkbon: null })}
           />
         </div>
-
-        <footer className="mt-6 text-xs text-slate-400 text-center">
-          Prototype — geen backend, state reset bij refresh.
-        </footer>
-      </div>
+      )}
 
       <Toast message={toast?.message} kind={toast?.kind} />
-    </div>
+    </>
   );
 }
