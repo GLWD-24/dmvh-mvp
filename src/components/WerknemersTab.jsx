@@ -4,8 +4,7 @@ import { workerFunctions } from '../data/seed.js';
 
 const blank = {
   name: '', type: 'employee', function: 'Bestuurder',
-  hireDate: '', uurloon1: 0, uurloon2: 0,
-  birthDate: '', address: '', identityCard: '', uitDienst: ''
+  hireDate: '', uurloon1: 0, uurloon2: 0
 };
 
 export default function WerknemersTab({ workers, onSave, onAdd, onDelete }) {
@@ -112,37 +111,9 @@ export default function WerknemersTab({ workers, onSave, onAdd, onDelete }) {
                   <Select value={draft.function} onChange={v => update('function', v)} options={workerFunctions} />
                 </FormField>
 
-                <FormField label="Datum in dienst">
+                <FormField label="Datum in dienst" span={2}>
                   <TextInput value={draft.hireDate} onChange={v => update('hireDate', v)} placeholder="DD/MM/JJJJ" />
                 </FormField>
-
-                <FormField label="Datum uit dienst">
-                  <TextInput value={draft.uitDienst || ''} onChange={v => update('uitDienst', v)} placeholder="DD/MM/JJJJ — leeg = nog actief" />
-                </FormField>
-
-                {!isSubcontractor && (
-                  <>
-                    <div className="col-span-2 mt-3 pt-3 border-t border-slate-200">
-                      <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Persoonsgegevens</div>
-                    </div>
-
-                    <FormField label="Geboortedatum">
-                      <TextInput value={draft.birthDate || ''} onChange={v => update('birthDate', v)} placeholder="DD/MM/JJJJ" />
-                    </FormField>
-
-                    <FormField label="Identiteitskaart">
-                      <TextInput value={draft.identityCard || ''} onChange={v => update('identityCard', v)} placeholder="590-xxxxxxx-xx" />
-                    </FormField>
-
-                    <FormField label="Privé adres" span={2}>
-                      <TextInput value={draft.address || ''} onChange={v => update('address', v)} placeholder="Straat 1, 8377 Zuienkerke" />
-                    </FormField>
-                  </>
-                )}
-
-                <div className="col-span-2 mt-3 pt-3 border-t border-slate-200">
-                  <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2">Tarieven</div>
-                </div>
 
                 {!isSubcontractor ? (
                   <>

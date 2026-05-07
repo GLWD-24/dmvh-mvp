@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import MasterDataShell, { FormField, TextInput, Select } from './MasterDataShell.jsx';
-import { machineGroups, eenheden } from '../data/seed.js';
+import { machineGroups } from '../data/seed.js';
 
 const blank = {
-  code: '', group: 'Bandenkraan', description: '', rate: 0, color: '#3B82F6', unit: 'uur', active: true
+  code: '', group: 'Bandenkraan', description: '', rate: 0, color: '#3B82F6'
 };
 
 const colorPresets = [
@@ -55,20 +55,17 @@ export default function MachinesTab({ machines, onSave, onAdd, onDelete }) {
       searchKeys={['code', 'description', 'group']}
       groupBy="group"
       renderRow={(m) => (
-        <div className={`flex items-center gap-2 ${m.active === false ? 'opacity-50' : ''}`}>
+        <div className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
             style={{ backgroundColor: m.color || '#6B7280' }}
             title={m.color}
           />
           <div className="min-w-0 flex-1">
-            <div className="font-medium truncate flex items-center gap-1.5">
-              {m.code}
-              {m.active === false && <span className="text-[9px] uppercase tracking-wider text-slate-400 font-normal">inactief</span>}
-            </div>
+            <div className="font-medium truncate">{m.code}</div>
             <div className="text-[10px] text-slate-500 truncate">{m.description}</div>
           </div>
-          <span className="text-[10px] text-slate-500 whitespace-nowrap">€ {(m.rate || 0).toFixed(0)}/{m.unit || 'u'}</span>
+          <span className="text-[10px] text-slate-500 whitespace-nowrap">€ {(m.rate || 0).toFixed(0)}/u</span>
         </div>
       )}
       renderForm={() => current ? (
@@ -101,16 +98,7 @@ export default function MachinesTab({ machines, onSave, onAdd, onDelete }) {
               <TextInput type="number" step="0.50" value={draft.rate} onChange={v => update('rate', v)} />
             </FormField>
 
-            <FormField label="Eenheid">
-              <Select
-                value={draft.unit || 'uur'}
-                onChange={v => update('unit', v)}
-                options={eenheden.map(e => e.value)}
-                renderOption={v => eenheden.find(e => e.value === v)?.label || v}
-              />
-            </FormField>
-
-            <FormField label="Kleur (planning view)" span={2}>
+            <FormField label="Kleur (planning view)">
               <div className="flex gap-1.5 flex-wrap items-center h-8">
                 {colorPresets.map(c => (
                   <button
@@ -132,22 +120,6 @@ export default function MachinesTab({ machines, onSave, onAdd, onDelete }) {
               <span className="font-medium">{draft.code || '...'}</span>
               <span className="text-slate-400">{draft.group}</span>
             </div>
-          </div>
-
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="machine-active"
-              checked={draft.active !== false}
-              onChange={e => update('active', e.target.checked)}
-              className="w-4 h-4"
-            />
-            <label htmlFor="machine-active" className="text-[12px] text-slate-700 cursor-pointer">
-              Machine is actief
-            </label>
-            <span className="text-[11px] text-slate-400 ml-2">
-              {draft.active === false ? 'Inactieve machines verschijnen niet in de planning-pool' : ''}
-            </span>
           </div>
 
           <button
