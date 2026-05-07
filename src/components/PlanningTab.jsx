@@ -104,6 +104,24 @@ export default function PlanningTab({
     onAssign(werfId, kind, id, instanceKey);
   };
 
+  // Dubbelklik op een cel → item terug naar pool (clear veld op assignment).
+  // Als hierdoor zowel werknemer als machine leeg zijn én geen extras, dan rij verwijderen.
+  const handleClearCell = (assignment, slot) => {
+    const patch = {};
+    if (slot === 'worker') patch.workerId = null;
+    if (slot === 'machine') patch.machineId = null;
+    if (slot === 'extra1') patch.extra1Id = null;
+    if (slot === 'extra2') patch.extra2Id = null;
+
+    const after = { ...assignment, ...patch };
+    const isEmpty = !after.workerId && !after.machineId && !after.extra1Id && !after.extra2Id;
+    if (isEmpty) {
+      onRemove(assignment.id);
+    } else {
+      onUpdateAssignment(assignment.id, patch);
+    }
+  };
+
   const handlePrint = () => {
     setPrintPreview(true);
     setTimeout(() => {
@@ -221,24 +239,26 @@ export default function PlanningTab({
                   </div>
                 </div>
 
-                {/* Toewijzingen tabel */}
-                {w.assignments.length === 0 ? (
-                  <div className="px-3 py-3 text-center text-[10px] text-slate-400 italic">
-                    Sleep een werknemer + machine hier...
-                  </div>
-                ) : (
-                  <table className="w-full text-[10px]" onClick={e => e.stopPropagation()}>
-                    <thead>
-                      <tr className="bg-slate-50/50 border-b border-slate-100 text-[8.5px] uppercase tracking-wider text-slate-400">
-                        <th className="text-left px-2 py-1 font-medium w-[26%]">Werknemer</th>
-                        <th className="text-left px-2 py-1 font-medium w-[22%]">Machine</th>
-                        <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 1</th>
-                        <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 2</th>
-                        <th className="text-left px-2 py-1 font-medium w-[20%]">Opmerking</th>
+                {/* Toewijzingen tabel — header altijd zichtbaar, ook bij lege werf */}
+                <table className="w-full text-[10px]" onClick={e => e.stopPropagation()}>
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100 text-[8.5px] uppercase tracking-wider text-slate-400">
+                      <th className="text-left px-2 py-1 font-medium w-[26%]">Werknemer</th>
+                      <th className="text-left px-2 py-1 font-medium w-[22%]">Machine</th>
+                      <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 1</th>
+                      <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 2</th>
+                      <th className="text-left px-2 py-1 font-medium w-[20%]">Opmerking</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {w.assignments.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-3 text-center text-[10px] text-slate-400 italic">
+                          Sleep een werknemer + machine hier...
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {w.assignments.map(a => {
+                    )}
+                    {w.assignments.map(a => {
                         const isHemzelf = a.workerId === 'HEMZELF';
                         const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
                         const mc = machines.find(x => x.id === a.machineId);
@@ -252,7 +272,11 @@ export default function PlanningTab({
                         return (
                           <tr key={a.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 group">
                             {/* Werknemer */}
-                            <td className="px-2 py-1.5 align-top">
+                            <td
+                              className={`px-2 py-1.5 align-top ${(wk || isHemzelf) ? 'cursor-pointer hover:bg-blue-50' : ''}`}
+                              onDoubleClick={() => { if (wk || isHemzelf) handleClearCell(a, 'worker'); }}
+                              title={(wk || isHemzelf) ? 'Dubbelklik om werknemer te verwijderen' : ''}
+                            >
                               <div className="flex items-center gap-1 flex-wrap">
                                 {halfLabel && (
                                   <span className={`text-[8px] font-semibold px-1 rounded ${half === 'am' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{halfLabel}</span>
@@ -267,6 +291,9 @@ export default function PlanningTab({
                                   <span className={`text-slate-900 ${half === 'pm' ? 'lowercase' : ''}`}>
                                     {renderName(wk.name, half)}
                                   </span>
+                                )}
+                                {!wk && !isHemzelf && (
+                                  <span className="text-slate-300 italic text-[9px]">— sleep werknemer —</span>
                                 )}
                                 {canSplit && !isHemzelf && (
                                   <button
@@ -287,7 +314,11 @@ export default function PlanningTab({
                             </td>
 
                             {/* Machine */}
-                            <td className="px-2 py-1.5 align-top">
+                            <td
+                              className={`px-2 py-1.5 align-top ${mc ? 'cursor-pointer hover:bg-red-50' : ''}`}
+                              onDoubleClick={() => { if (mc) handleClearCell(a, 'machine'); }}
+                              title={mc ? 'Dubbelklik om machine te verwijderen' : ''}
+                            >
                               {mc ? (
                                 <span className="inline-flex items-center gap-1">
                                   {mc.color && (
@@ -296,13 +327,14 @@ export default function PlanningTab({
                                   <span className="text-slate-900">{mc.code}</span>
                                 </span>
                               ) : (
-                                <span className="text-slate-300 italic">—</span>
+                                <span className="text-slate-300 italic text-[9px]">— sleep machine —</span>
                               )}
                             </td>
 
-                            {/* Extra 1 — drop zone */}
+                            {/* Extra 1 — drop zone + dubbelklik om te verwijderen */}
                             <td
-                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex1 ? '' : 'bg-slate-50/30'}`}
+                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex1 ? 'cursor-pointer hover:bg-amber-50' : 'bg-slate-50/30'}`}
+                              onDoubleClick={() => { if (ex1) handleClearCell(a, 'extra1'); }}
                               onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDrop={e => {
@@ -310,26 +342,19 @@ export default function PlanningTab({
                                 e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
                                 handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra1' });
                               }}
+                              title={ex1 ? `${ex1.name} — dubbelklik om te verwijderen` : 'Sleep een artikel hier'}
                             >
                               {ex1 ? (
-                                <span className="inline-flex items-center gap-1 group/cell">
-                                  <span className="text-amber-700 font-medium">{ex1.code}</span>
-                                  <button
-                                    onClick={() => onUpdateAssignment(a.id, { extra1Id: null })}
-                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover/cell:opacity-100"
-                                    title="Verwijderen"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
+                                <span className="text-amber-700 font-medium">{ex1.code}</span>
                               ) : (
                                 <span className="text-slate-300 italic text-[9px]">+ artikel</span>
                               )}
                             </td>
 
-                            {/* Extra 2 — drop zone */}
+                            {/* Extra 2 — drop zone + dubbelklik om te verwijderen */}
                             <td
-                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex2 ? '' : 'bg-slate-50/30'}`}
+                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex2 ? 'cursor-pointer hover:bg-amber-50' : 'bg-slate-50/30'}`}
+                              onDoubleClick={() => { if (ex2) handleClearCell(a, 'extra2'); }}
                               onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDrop={e => {
@@ -337,18 +362,10 @@ export default function PlanningTab({
                                 e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
                                 handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra2' });
                               }}
+                              title={ex2 ? `${ex2.name} — dubbelklik om te verwijderen` : 'Sleep een artikel hier'}
                             >
                               {ex2 ? (
-                                <span className="inline-flex items-center gap-1 group/cell">
-                                  <span className="text-amber-700 font-medium">{ex2.code}</span>
-                                  <button
-                                    onClick={() => onUpdateAssignment(a.id, { extra2Id: null })}
-                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover/cell:opacity-100"
-                                    title="Verwijderen"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
+                                <span className="text-amber-700 font-medium">{ex2.code}</span>
                               ) : (
                                 <span className="text-slate-300 italic text-[9px]">+ artikel</span>
                               )}
@@ -378,7 +395,6 @@ export default function PlanningTab({
                       })}
                     </tbody>
                   </table>
-                )}
               </div>
               );
             })}
