@@ -301,14 +301,11 @@ export default function PlanningTab({
                                 {halfLabel && (
                                   <span className={`text-[8px] font-semibold px-1 rounded ${half === 'am' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{halfLabel}</span>
                                 )}
-                                {isDup && (
-                                  <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800" title="Dubbele werknemer instantie">×2</span>
-                                )}
                                 {isHemzelf && (
                                   <span className="text-slate-700 italic" title="Naakte machineverhuur — klant bestuurt zelf">HEMZELF</span>
                                 )}
                                 {wk && (
-                                  <span className={`text-slate-900 ${half === 'pm' ? 'lowercase' : ''}`}>
+                                  <span className={`text-slate-900 ${(half === 'pm' || isDup) ? 'lowercase' : ''}`} title={isDup ? 'Dubbele werknemer instantie' : ''}>
                                     {renderName(wk.name, half)}
                                   </span>
                                 )}
@@ -494,8 +491,7 @@ export default function PlanningTab({
                     } ${opacity} ${draggable ? 'cursor-grab hover:bg-white' : 'cursor-not-allowed'}`}
                     title={status === 'am-only' ? 'NM nog vrij — sleep om PM toe te wijzen' : ''}
                   >
-                    {w.isDuplicate && <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800">×2</span>}
-                    <span className="flex-1 truncate">
+                    <span className={`flex-1 truncate ${w.isDuplicate ? 'lowercase' : ''}`} title={w.isDuplicate ? 'Dubbele werknemer instantie' : ''}>
                       {w.name}
                       {labelSuffix && <span className="text-slate-500 text-[9px] ml-1">{labelSuffix}</span>}
                     </span>
@@ -1267,7 +1263,7 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
     const ex2 = a.extra2Id ? artikelen.find(x => x.id === a.extra2Id) : null;
     const half = a.half || 'full';
     const isDup = a.instanceKey && a.instanceKey !== 'main';
-    const lowercaseName = half === 'pm';
+    const lowercaseName = half === 'pm' || isDup;
     return {
       worker: isHemzelf
         ? 'HEMZELF'
@@ -1365,7 +1361,6 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
                           <div className="indent" />
                           <div className={r.worker === 'HEMZELF' ? 'italic' : ''}>
                             {r.worker}
-                            {r.isDup && <span className="text-[9px] text-purple-700 ml-1">×2</span>}
                           </div>
                           <div className={`useit-machine ${r.machineColor !== '#3B82F6' ? 'colored' : ''}`}>{r.machine}</div>
                           <div className="useit-artikel">{r.extra1}</div>
