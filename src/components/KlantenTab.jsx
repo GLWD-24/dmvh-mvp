@@ -60,42 +60,12 @@ export default function KlantenTab({ klanten, werven, onSave, onAdd, onDelete })
 
   return (
     <div className="h-full flex flex-col">
-      {/* Type filter chips */}
-      <div className="px-4 py-2 border-b border-slate-200 bg-white flex items-center gap-1.5 overflow-x-auto shrink-0">
-        <button
-          onClick={() => setTypeFilter('all')}
-          className={`text-[11px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${
-            typeFilter === 'all'
-              ? 'bg-slate-900 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          Alle <span className="opacity-70 ml-1">{counts.all}</span>
-        </button>
-        {klantTypes.map(t => {
-          const c = typeColors[t.value] || typeColors.klant;
-          const isActive = typeFilter === t.value;
-          return (
-            <button
-              key={t.value}
-              onClick={() => setTypeFilter(t.value)}
-              className={`text-[11px] px-2.5 py-1 rounded-full font-medium whitespace-nowrap flex items-center gap-1.5 ${
-                isActive
-                  ? 'bg-slate-900 text-white'
-                  : `${c.bg} ${c.text} hover:opacity-80`
-              }`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : c.dot}`} />
-              {t.label}
-              <span className="opacity-70">{counts[t.value] || 0}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Type filter chips — verborgen voor MVP, alleen 'Klant' bestaat momenteel.
+          Code blijft staan voor M2 wanneer leveranciers/architecten/prospecten weer aan boord komen. */}
 
       <div className="flex-1 min-h-0">
     <MasterDataShell
-      title={typeFilter === 'all' ? 'Alle relaties' : klantTypes.find(t => t.value === typeFilter)?.label + 'en'}
+      title="Klanten"
       items={filteredKlanten}
       selectedId={selectedId}
       onSelect={setSelectedId}

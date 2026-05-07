@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices, seedBedrijfsgegevens, seedServices, seedArtikelen } from './data/seed.js';
+import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices, seedBedrijfsgegevens, seedServices, seedArtikelen, seedWerfleiders } from './data/seed.js';
 import AppShell from './components/AppShell.jsx';
 import DashboardTab from './components/DashboardTab.jsx';
 import BedrijfsgegevensTab from './components/BedrijfsgegevensTab.jsx';
@@ -7,14 +7,18 @@ import DienstenTab from './components/DienstenTab.jsx';
 import ArtikelenTab from './components/ArtikelenTab.jsx';
 import PlanningTab from './components/PlanningTab.jsx';
 import InboxTab from './components/InboxTab.jsx';
+import WerkbonDetailTab from './components/WerkbonDetailTab.jsx';
 import FacturatieTab from './components/FacturatieTab.jsx';
 import KlantenTab from './components/KlantenTab.jsx';
 import WervenTab from './components/WervenTab.jsx';
 import WerknemersTab from './components/WerknemersTab.jsx';
+import WerfleidersTab from './components/WerfleidersTab.jsx';
 import MachinesTab from './components/MachinesTab.jsx';
 import UurroosterTab from './components/UurroosterTab.jsx';
 import MobilePhone from './components/MobilePhone.jsx';
 import Toast from './components/Toast.jsx';
+import LoginScreen from './components/LoginScreen.jsx';
+import WerfleiderPortal from './components/WerfleiderPortal.jsx';
 
 export default function App() {
   const [klanten, setKlanten] = useState(seedKlanten);
@@ -23,6 +27,7 @@ export default function App() {
   const [machines, setMachines] = useState(seedMachines);
   const [services, setServices] = useState(seedServices);
   const [artikelen, setArtikelen] = useState(seedArtikelen);
+  const [werfleiders, setWerfleiders] = useState(seedWerfleiders);
   const [bedrijf, setBedrijf] = useState(seedBedrijfsgegevens);
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [incomingInvoices] = useState(seedIncomingInvoices);
@@ -85,6 +90,278 @@ export default function App() {
   const [status, setStatus] = useState({ text: 'Ready', kind: 'info' });
   const [mobile, setMobile] = useState({ screen: 'today', currentWerkbon: null });
   const [showMobile, setShowMobile] = useState(false);
+
+  // Welke werkbon-detail open staat (nul = geen)
+  const [selectedWerkbonId, setSelectedWerkbonId] = useState(null);
+
+  // Hash-routing voor deelbare links naar bonnen: #werkbon/{id}
+  // Werkt voor admin (intern), werfleider (eigen tab) en publieke read-only links.
+  useEffect(() => {
+    const checkHash = () => {
+      const m = window.location.hash.match(/^#werkbon\/([\w-]+)/);
+      if (m) {
+        setSelectedWerkbonId(m[1]);
+        setTab('werkbonDetail');
+      } else if (window.location.hash === '#werfleider') {
+        setTab('werfleiderLogin');
+      }
+    };
+    checkHash();
+    window.addEventListener('hashchange', checkHash);
+    return () => window.removeEventListener('hashchange', checkHash);
+  }, []);
+
+  const openWerkbonDetail = (id) => {
+    setSelectedWerkbonId(id);
+    setTab('werkbonDetail');
+    window.location.hash = `werkbon/${id}`;
+  };
+  const closeWerkbonDetail = () => {
+    setSelectedWerkbonId(null);
+    setTab('inbox');
+    if (window.location.hash.startsWith('#werkbon/')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  };
+
+  const handleUpdateWerkbon = (id, patch) => {
+    setWerkbonnen(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    showToast('Werkbon bijgewerkt');
+  };
+
+  // ========== AUTH (kantoor / admin) ==========
+  // currentUser: null = niet ingelogd | { role, name, email, loginAt, lastActivity }
+  // Sessie wordt bewaard in localStorage. Geldig zolang lastActivity binnen ADMIN_SESSION_MS.
+  const ADMIN_SESSION_MS = 8 * 60 * 60 * 1000; // 8 uur
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem('dmvh.currentUser');
+      if (!raw) return null;
+      const u = JSON.parse(raw);
+      if (!u || !u.role) return null;
+      // Sessie verlopen?
+      if (u.role === 'admin') {
+        const last = u.lastActivity || u.loginAt || 0;
+        if (Date.now() - last > ADMIN_SESSION_MS) {
+          localStorage.removeItem('dmvh.currentUser');
+          return null;
+        }
+      }
+      return u;
+    } catch {
+      return null;
+    }
+  });
+
+  // Persist currentUser in localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('dmvh.currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('dmvh.currentUser');
+    }
+  }, [currentUser]);
+
+  // Activity tracker — bij elke klik/keystroke vernieuw lastActivity (alleen voor admin)
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const refresh = () => {
+      setCurrentUser(u => u ? { ...u, lastActivity: Date.now() } : u);
+    };
+    // Throttle: max 1x per minuut updaten om setState-spam te vermijden
+    let last = 0;
+    const handler = () => {
+      const now = Date.now();
+      if (now - last > 60000) {
+        last = now;
+        refresh();
+      }
+    };
+    window.addEventListener('mousedown', handler);
+    window.addEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('mousedown', handler);
+      window.removeEventListener('keydown', handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.email]);
+
+  // Auto-logout check elke minuut voor admins
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const interval = setInterval(() => {
+      const last = currentUser.lastActivity || currentUser.loginAt || 0;
+      if (Date.now() - last > ADMIN_SESSION_MS) {
+        setCurrentUser(null);
+        showToast('Sessie verlopen — meld opnieuw aan', 'warn');
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
+
+  // ========== WERKNEMER AUTH (telefoon, PIN-based) ==========
+  // loggedInWorkerId blijft permanent bewaard in localStorage tot expliciete logout.
+  // pinAttempts/pinBlocked staan op de werknemer-record zelf (zie seedWorkers).
+  const [loggedInWorkerId, setLoggedInWorkerId] = useState(() => {
+    try {
+      return localStorage.getItem('dmvh.workerId') || null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (loggedInWorkerId) {
+      localStorage.setItem('dmvh.workerId', loggedInWorkerId);
+    } else {
+      localStorage.removeItem('dmvh.workerId');
+    }
+  }, [loggedInWorkerId]);
+
+  // PIN poging: { ok, blocked, attemptsLeft }. Bij 5x fout → pinBlocked = true.
+  const handlePinAttempt = (workerId, pin) => {
+    const worker = workers.find(w => w.id === workerId);
+    if (!worker) return { ok: false, blocked: false, attemptsLeft: 0 };
+    if (worker.pinBlocked) return { ok: false, blocked: true, attemptsLeft: 0 };
+
+    if (worker.pin === pin) {
+      // Geslaagd → reset counter, log in
+      setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, pinAttempts: 0 } : w));
+      setLoggedInWorkerId(workerId);
+      // Init mobile state op "today"
+      setMobile({ screen: 'today', currentWerkbon: null });
+      return { ok: true, blocked: false, attemptsLeft: 5 };
+    }
+
+    // Mislukt → tel poging op
+    const newAttempts = (worker.pinAttempts || 0) + 1;
+    const willBlock = newAttempts >= 5;
+    setWorkers(prev => prev.map(w => w.id === workerId
+      ? { ...w, pinAttempts: newAttempts, pinBlocked: willBlock }
+      : w
+    ));
+    if (willBlock) {
+      showToast(`${worker.name} is geblokkeerd na 5 verkeerde pogingen`, 'warn');
+    }
+    return { ok: false, blocked: willBlock, attemptsLeft: Math.max(0, 5 - newAttempts) };
+  };
+
+  const handleWorkerLogout = () => {
+    setLoggedInWorkerId(null);
+    setMobile({ screen: 'today', currentWerkbon: null });
+  };
+
+  // ========== WERFLEIDER AUTH (werkbon goedkeuring via eigen login) ==========
+  // Werfleider logt in via /werfleider URL-tab. Hash-route based: window.location.hash = '#werfleider'
+  // De werfleider ziet enkel werkbonnen van werven waar hij/zij aangewezen is.
+  const [loggedInWerfleiderId, setLoggedInWerfleiderId] = useState(() => {
+    try { return localStorage.getItem('dmvh.werfleiderId') || null; } catch { return null; }
+  });
+  useEffect(() => {
+    if (loggedInWerfleiderId) {
+      localStorage.setItem('dmvh.werfleiderId', loggedInWerfleiderId);
+    } else {
+      localStorage.removeItem('dmvh.werfleiderId');
+    }
+  }, [loggedInWerfleiderId]);
+
+  const handleWerfleiderPinAttempt = (werfleiderId, pin) => {
+    const wl = werfleiders.find(w => w.id === werfleiderId);
+    if (!wl) return { ok: false, blocked: false, attemptsLeft: 0 };
+    if (wl.pinBlocked) return { ok: false, blocked: true, attemptsLeft: 0 };
+    if (wl.pin === pin) {
+      setWerfleiders(prev => prev.map(w => w.id === werfleiderId ? { ...w, pinAttempts: 0 } : w));
+      setLoggedInWerfleiderId(werfleiderId);
+      return { ok: true, blocked: false, attemptsLeft: 5 };
+    }
+    const newAttempts = (wl.pinAttempts || 0) + 1;
+    const willBlock = newAttempts >= 5;
+    setWerfleiders(prev => prev.map(w => w.id === werfleiderId
+      ? { ...w, pinAttempts: newAttempts, pinBlocked: willBlock }
+      : w
+    ));
+    if (willBlock) showToast(`${wl.name} is geblokkeerd na 5 verkeerde pogingen`, 'warn');
+    return { ok: false, blocked: willBlock, attemptsLeft: Math.max(0, 5 - newAttempts) };
+  };
+
+  const handleWerfleiderLogout = () => setLoggedInWerfleiderId(null);
+
+  // Werfleider keurt een werkbon goed of af
+  const handleWerfleiderApprove = (werkbonId, decision) => {
+    setWerkbonnen(prev => prev.map(w => w.id === werkbonId
+      ? { ...w, status: decision === 'approve' ? 'approved' : 'rejected', werfleiderApprovedBy: loggedInWerfleiderId, werfleiderApprovedAt: Date.now() }
+      : w
+    ));
+    showToast(decision === 'approve' ? 'Werkbon goedgekeurd' : 'Werkbon afgewezen');
+  };
+
+  // Werfleider CRUD
+  const werfleiderAdd = (data) => {
+    const newWl = {
+      id: 'wl-' + Date.now(),
+      pin: String(Math.floor(100000 + Math.random() * 900000)),
+      pinAttempts: 0,
+      pinBlocked: false,
+      ...data
+    };
+    setWerfleiders(prev => [...prev, newWl]);
+    showToast('Werfleider toegevoegd');
+  };
+  const werfleiderSave = (id, patch) => {
+    setWerfleiders(prev => prev.map(w => w.id === id ? { ...w, ...patch } : w));
+    showToast('Werfleider opgeslagen');
+  };
+  const werfleiderDelete = (id) => {
+    setWerfleiders(prev => prev.filter(w => w.id !== id));
+    setWerven(prev => prev.map(w => w.werfleiderId === id ? { ...w, werfleiderId: null } : w));
+    showToast('Werfleider verwijderd', 'warn');
+  };
+  const werfleiderResetPin = (id) => {
+    setWerfleiders(prev => prev.map(w => w.id === id
+      ? { ...w, pinAttempts: 0, pinBlocked: false } : w));
+    showToast('Werfleider gedeblokkeerd');
+  };
+  const werfleiderSetPin = (id, newPin) => {
+    if (!/^\d{6}$/.test(newPin)) {
+      showToast('PIN moet 6 cijfers zijn', 'warn');
+      return false;
+    }
+    setWerfleiders(prev => prev.map(w => w.id === id
+      ? { ...w, pin: newPin, pinAttempts: 0, pinBlocked: false } : w));
+    showToast('Nieuwe PIN ingesteld');
+    return true;
+  };
+
+  // Beheerder-functie: deblokkeer een werknemer + reset PIN-pogingen
+  const handleResetWorkerPin = (workerId) => {
+    setWorkers(prev => prev.map(w => w.id === workerId
+      ? { ...w, pinAttempts: 0, pinBlocked: false }
+      : w
+    ));
+    showToast('Werknemer gedeblokkeerd');
+  };
+
+  // Beheerder-functie: nieuwe PIN instellen voor een werknemer
+  const handleSetWorkerPin = (workerId, newPin) => {
+    if (!/^\d{6}$/.test(newPin)) {
+      showToast('PIN moet 6 cijfers zijn', 'warn');
+      return false;
+    }
+    setWorkers(prev => prev.map(w => w.id === workerId
+      ? { ...w, pin: newPin, pinAttempts: 0, pinBlocked: false }
+      : w
+    ));
+    showToast('Nieuwe PIN ingesteld');
+    return true;
+  };
+
+  const handleLogin = (user) => {
+    setCurrentUser({ ...user, lastActivity: Date.now() });
+  };
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
 
   const showToast = (message, kind = 'success') => {
     setToast({ message, kind });
@@ -576,12 +853,14 @@ export default function App() {
     }
     if (action === 'submit') {
       const newNr = 431723 + werkbonnen.length + 1;
+      const loggedInWorker = workers.find(w => w.id === loggedInWorkerId);
+      const workerName = loggedInWorker?.name || 'ONBEKEND';
       setWerkbonnen(prev => [...prev, {
         id: 'wb-' + Date.now(),
         nr: newNr,
         klant: wb.klant,
         werf: wb.werf,
-        worker: 'EECKLOO FREDERIK',
+        worker: workerName,
         machine: wb.machine,
         date: '04/05/2026',
         fiche: wb.hours,
@@ -699,7 +978,19 @@ export default function App() {
           />
         );
       case 'inbox':
-        return <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} />;
+        return <InboxTab werkbonnen={werkbonnen} onApprove={handleApprove} onReject={handleReject} onOpenDetail={openWerkbonDetail} />;
+      case 'werkbonDetail':
+        return (
+          <WerkbonDetailTab
+            werkbonId={selectedWerkbonId}
+            werkbonnen={werkbonnen}
+            onUpdateWerkbon={handleUpdateWerkbon}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onBack={closeWerkbonDetail}
+            mode="admin"
+          />
+        );;
       case 'uurrooster':
         return (
           <UurroosterTab
@@ -728,9 +1019,11 @@ export default function App() {
       case 'klanten':
         return <KlantenTab klanten={klanten} werven={werven} onSave={klantSave} onAdd={klantAdd} onDelete={klantDelete} />;
       case 'werven':
-        return <WervenTab werven={werven} klanten={klanten} onSave={werfSave} onAdd={werfAdd} onDelete={werfDelete} />;
+        return <WervenTab werven={werven} klanten={klanten} werfleiders={werfleiders} onSave={werfSave} onAdd={werfAdd} onDelete={werfDelete} />;
+      case 'werfleiders':
+        return <WerfleidersTab werfleiders={werfleiders} klanten={klanten} onSave={werfleiderSave} onAdd={werfleiderAdd} onDelete={werfleiderDelete} onResetPin={werfleiderResetPin} onSetPin={werfleiderSetPin} />;
       case 'werknemers':
-        return <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} />;
+        return <WerknemersTab workers={workers} onSave={workerSave} onAdd={workerAdd} onDelete={workerDelete} onResetPin={handleResetWorkerPin} onSetPin={handleSetWorkerPin} />;
       case 'machines':
         return <MachinesTab machines={machines} onSave={machineSave} onAdd={machineAdd} onDelete={machineDelete} />;
       case 'artikelen':
@@ -744,17 +1037,43 @@ export default function App() {
     }
   };
 
+  // Detecteer of we op werfleider-route zijn
+  const [isWerfleiderRoute, setIsWerfleiderRoute] = useState(() => window.location.hash === '#werfleider');
+  useEffect(() => {
+    const onHash = () => setIsWerfleiderRoute(window.location.hash === '#werfleider');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   return (
     <>
+      {/* Werfleider portaal — aparte route, eigen login + alleen bonnen-goedkeuren */}
+      {isWerfleiderRoute ? (
+        <WerfleiderPortal
+          werfleiders={werfleiders}
+          werven={decoratedWerven}
+          werkbonnen={werkbonnen}
+          loggedInWerfleiderId={loggedInWerfleiderId}
+          onPinAttempt={handleWerfleiderPinAttempt}
+          onLogout={handleWerfleiderLogout}
+          onApprove={(id) => handleWerfleiderApprove(id, 'approve')}
+          onReject={(id) => handleWerfleiderApprove(id, 'reject')}
+        />
+      ) : !currentUser ? (
+        <LoginScreen onLogin={handleLogin} />
+      ) : (
       <AppShell
         activeTab={tab}
         onTabChange={setTab}
         badges={badges}
         demoFlow={demoFlowItems}
         statusBadge={status.text !== 'Ready' ? { text: status.text, kind: status.kind } : null}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       >
         {renderContent()}
       </AppShell>
+      )}
 
       {/* Mobile phone — verstopt achter demo, opent als overlay rechtsonder */}
       {showMobile && (
@@ -772,9 +1091,14 @@ export default function App() {
           <MobilePhone
             state={mobile}
             werven={decoratedWerven} workers={workers} machines={machines}
+            artikelen={artikelen}
             onClockIn={mobileClockIn}
             onSubmitWerkbon={mobileSubmit}
             onReset={() => setMobile({ screen: 'today', currentWerkbon: null })}
+            loggedInWorkerId={loggedInWorkerId}
+            onWorkerLogin={(id) => setLoggedInWorkerId(id)}
+            onWorkerLogout={handleWorkerLogout}
+            onPinAttempt={handlePinAttempt}
           />
         </div>
       )}

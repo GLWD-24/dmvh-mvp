@@ -6,7 +6,7 @@ const blank = {
   startDate: '', endDate: ''
 };
 
-export default function WervenTab({ werven, klanten, onSave, onAdd, onDelete }) {
+export default function WervenTab({ werven, klanten, werfleiders = [], onSave, onAdd, onDelete }) {
   const [selectedId, setSelectedId] = useState(werven[0]?.id || null);
   const [draft, setDraft] = useState(blank);
   const [filter, setFilter] = useState('open'); // 'open' | 'closed' | 'all'
@@ -121,6 +121,30 @@ export default function WervenTab({ werven, klanten, onSave, onAdd, onDelete }) 
                 <option value="open">Open</option>
                 <option value="closed">Afgesloten</option>
               </select>
+            </FormField>
+            <FormField label="Werfleider" span={2}>
+              <select
+                value={draft.werfleiderId || ''}
+                onChange={e => update('werfleiderId', e.target.value || null)}
+                className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+              >
+                <option value="">— Geen werfleider —</option>
+                {werfleiders
+                  .filter(wl => !draft.klantId || wl.klantId === draft.klantId || !wl.klantId)
+                  .map(wl => (
+                    <option key={wl.id} value={wl.id}>
+                      {wl.name}{wl.email ? ` — ${wl.email}` : ''}
+                    </option>
+                  ))}
+              </select>
+              {draft.werfleiderId && (() => {
+                const wl = werfleiders.find(x => x.id === draft.werfleiderId);
+                return wl ? (
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    📞 {wl.phone || '—'} · ✉ {wl.email || '—'}
+                  </div>
+                ) : null;
+              })()}
             </FormField>
           </div>
 

@@ -9,12 +9,7 @@ export const seedKlanten = [
   { id: 'k5', name: 'ASWEBO ZEEBRUGGE', address: 'Kustlaan 1, 8380 Zeebrugge', vat: 'BE 0406.661.452', terms: 45, contact: 'W. Oosterlinck', phone: '050 54 12 34', email: 'w.oosterlinck@aswebo.be', mobile: '0498 12 34 56', fax: '', noPO: false, type: 'klant' },
   { id: 'k6', name: 'KESTELEYN Charles', address: 'Burgstraat 88, 9000 Gent', vat: 'BE 0512.998.224', terms: 30, contact: 'C. Kesteleyn', phone: '09 224 55 66', email: 'charles@kesteleyn.be', mobile: '0475 99 88 77', fax: '', noPO: true, type: 'klant' },
   { id: 'k7', name: 'HYE', address: 'Noordlaan 22, 2030 Antwerpen', vat: 'BE 0404.882.001', terms: 45, contact: 'M. Hye', phone: '03 541 22 33', email: 'm.hye@hye.be', mobile: '0476 33 22 11', fax: '03 541 22 34', noPO: false, type: 'klant' },
-  { id: 'k8', name: 'JONCKHEERE', address: 'Spinnerijstraat 7, 8800 Roeselare', vat: 'BE 0405.117.299', terms: 30, contact: 'F. Jonckheere', phone: '051 23 45 67', email: 'info@jonckheere.be', mobile: '', fax: '', noPO: false, type: 'klant' },
-  // Voorbeelden van andere types — voor demo klant_type filter
-  { id: 'l1', name: 'ATLAS COPCO', address: 'Boomsesteenweg 957, 2610 Wilrijk', vat: 'BE 0403.992.060', terms: 30, contact: 'Inkoop', phone: '03 870 44 44', email: 'verkoop@atlascopco.com', mobile: '', fax: '', noPO: false, type: 'leverancier' },
-  { id: 'l2', name: 'AVEVE LANDBOUW', address: 'Aarschotsesteenweg 84, 3012 Leuven', vat: 'BE 0427.260.272', terms: 30, contact: 'P. Daniels', phone: '016 23 89 89', email: 'orders@aveve.be', mobile: '', fax: '', noPO: false, type: 'leverancier' },
-  { id: 'a1', name: 'A2D Architecten', address: 'Sint-Pietersnieuwstraat 1, 9000 Gent', vat: 'BE 0476.123.456', terms: 30, contact: 'Lieven De Pauw', phone: '09 225 67 89', email: 'info@a2darchitecten.be', mobile: '', fax: '', noPO: false, type: 'architect' },
-  { id: 'p1', name: 'BOUWGROEP DE WIT', address: 'Industriestraat 45, 8800 Roeselare', vat: 'BE 0789.456.123', terms: 30, contact: 'J. De Wit', phone: '051 33 22 11', email: 'j.dewit@bouwgroepdewit.be', mobile: '', fax: '', noPO: false, type: 'prospect' }
+  { id: 'k8', name: 'JONCKHEERE', address: 'Spinnerijstraat 7, 8800 Roeselare', vat: 'BE 0405.117.299', terms: 30, contact: 'F. Jonckheere', phone: '051 23 45 67', email: 'info@jonckheere.be', mobile: '', fax: '', noPO: false, type: 'klant' }
 ];
 
 // Werven: klantId references seedKlanten.id. Werven represent specific projects/locations
@@ -24,33 +19,44 @@ export const seedKlanten = [
 // `startDate` = when werf was opened. `endDate` set when closed for soft-delete + reporting.
 export const seedWerven = [
   // AVEVE AALTER
-  { id: 'aveve-1', klantId: 'k1', omschrijving: 'Aalter', address: 'Aalter', status: 'open', startDate: '01/03/2026', endDate: null, assignments: [] },
+  { id: 'aveve-1', klantId: 'k1', omschrijving: 'Aalter', address: 'Aalter', status: 'open', startDate: '01/03/2026', endDate: null, werfleiderId: 'wl1', assignments: [] },
   // AGRO ENERGIEK
-  { id: 'agro-1', klantId: 'k2', omschrijving: 'Zomergem', address: 'Zomergem', status: 'open', startDate: '15/02/2026', endDate: null, assignments: [] },
+  { id: 'agro-1', klantId: 'k2', omschrijving: 'Zomergem', address: 'Zomergem', status: 'open', startDate: '15/02/2026', endDate: null, werfleiderId: 'wl2', assignments: [] },
   // BESIX
-  { id: 'besix-1', klantId: 'k3', omschrijving: 'Winterdijk', address: 'Winterdijk', status: 'open', startDate: '20/01/2026', endDate: null, assignments: [] },
+  { id: 'besix-1', klantId: 'k3', omschrijving: 'Winterdijk', address: 'Winterdijk', status: 'open', startDate: '20/01/2026', endDate: null, werfleiderId: 'wl3', assignments: [] },
   // ASWEBO ROESELARE — multiple werven illustrated like real planning
-  { id: 'aswebo-r-1', klantId: 'k4', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/03/2026', endDate: null, assignments: [] },
-  { id: 'aswebo-r-2', klantId: 'k4', omschrijving: 'Heist kaaimuur', address: 'Heist', status: 'open', startDate: '05/04/2026', endDate: null, assignments: [] },
+  { id: 'aswebo-r-1', klantId: 'k4', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/03/2026', endDate: null, werfleiderId: 'wl4', assignments: [] },
+  { id: 'aswebo-r-2', klantId: 'k4', omschrijving: 'Heist kaaimuur', address: 'Heist', status: 'open', startDate: '05/04/2026', endDate: null, werfleiderId: 'wl4', assignments: [] },
   // ASWEBO ZEEBRUGGE
-  { id: 'aswebo-z-1', klantId: 'k5', omschrijving: 'Zeebrugge', address: 'Zeebrugge', status: 'open', startDate: '01/04/2026', endDate: null, assignments: [] },
+  { id: 'aswebo-z-1', klantId: 'k5', omschrijving: 'Zeebrugge', address: 'Zeebrugge', status: 'open', startDate: '01/04/2026', endDate: null, werfleiderId: 'wl5', assignments: [] },
   // KESTELEYN Charles
-  { id: 'kest-1', klantId: 'k6', omschrijving: 'Gent Ragnar laden', address: 'Gent', status: 'open', startDate: '15/03/2026', endDate: null, assignments: [] },
+  { id: 'kest-1', klantId: 'k6', omschrijving: 'Gent Ragnar laden', address: 'Gent', status: 'open', startDate: '15/03/2026', endDate: null, werfleiderId: null, assignments: [] },
   // HYE — 2 werven
-  { id: 'hye-1', klantId: 'k7', omschrijving: 'Antwerpen', address: 'Antwerpen', status: 'open', startDate: '01/02/2026', endDate: null, assignments: [] },
-  { id: 'hye-2', klantId: 'k7', omschrijving: 'Onderhoud patrimonium 543', address: 'Brugge', status: 'open', startDate: '20/03/2026', endDate: null, assignments: [] },
+  { id: 'hye-1', klantId: 'k7', omschrijving: 'Antwerpen', address: 'Antwerpen', status: 'open', startDate: '01/02/2026', endDate: null, werfleiderId: 'wl6', assignments: [] },
+  { id: 'hye-2', klantId: 'k7', omschrijving: 'Onderhoud patrimonium 543', address: 'Brugge', status: 'open', startDate: '20/03/2026', endDate: null, werfleiderId: 'wl6', assignments: [] },
   // JONCKHEERE
-  { id: 'jonck-1', klantId: 'k8', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/04/2026', endDate: null, assignments: [] }
+  { id: 'jonck-1', klantId: 'k8', omschrijving: 'Roeselare', address: 'Roeselare', status: 'open', startDate: '10/04/2026', endDate: null, werfleiderId: null, assignments: [] }
+];
+
+// Werfleiders — krijgen PIN-toegang om bonnen van hun werven goed te keuren.
+// Eén werfleider kan op meerdere werven van verschillende klanten zitten.
+export const seedWerfleiders = [
+  { id: 'wl1', name: 'JAN MAES', email: 'j.maes@aveve-aalter.be', phone: '0475 11 22 33', klantId: 'k1', pin: '200001', pinAttempts: 0, pinBlocked: false },
+  { id: 'wl2', name: 'PETER VERSTRAETE', email: 'p.verstraete@agroenergiek.be', phone: '0496 55 44 33', klantId: 'k2', pin: '200002', pinAttempts: 0, pinBlocked: false },
+  { id: 'wl3', name: 'KOEN BOGAERT', email: 'k.bogaert@besix.com', phone: '0477 88 99 00', klantId: 'k3', pin: '200003', pinAttempts: 0, pinBlocked: false },
+  { id: 'wl4', name: 'WIM OOSTERLINCK', email: 'w.oosterlinck@aswebo.be', phone: '0498 12 34 56', klantId: 'k4', pin: '200004', pinAttempts: 0, pinBlocked: false },
+  { id: 'wl5', name: 'TOM DE BACKER', email: 't.debacker@aswebo.be', phone: '0498 76 54 32', klantId: 'k5', pin: '200005', pinAttempts: 0, pinBlocked: false },
+  { id: 'wl6', name: 'MARC HYE', email: 'm.hye@hye.be', phone: '0476 33 22 11', klantId: 'k7', pin: '200006', pinAttempts: 0, pinBlocked: false }
 ];
 
 export const seedWorkers = [
-  { id: 'w1', name: 'DEBRUYCKER', type: 'employee', function: 'Bestuurder', hireDate: '15/03/2018', uurloon1: 24.50, uurloon2: 36.75, birthDate: '12/05/1985', address: 'Brugsesteenweg 12, 8377 Zuienkerke', identityCard: '590-0123456-87' },
-  { id: 'w2', name: 'EECKLOO FREDERIK', type: 'employee', function: 'Bestuurder', hireDate: '01/06/2015', uurloon1: 26.00, uurloon2: 39.00, birthDate: '23/09/1980', address: 'Kerkstraat 45, 8377 Meetkerke', identityCard: '590-0987654-21' },
-  { id: 'w3', name: 'INGELBRECHT BART', type: 'employee', function: 'Bestuurder', hireDate: '12/09/2011', uurloon1: 27.50, uurloon2: 41.25, birthDate: '07/11/1975', address: 'Dorpsstraat 8, 8200 Brugge', identityCard: '590-1122334-55' },
-  { id: 'w4', name: 'DEMEULENAERE GINO', type: 'subcontractor', function: 'Bestuurder', hireDate: '20/01/2020', uurloon1: 52.00, uurloon2: 65.00, birthDate: '19/03/1982', address: 'Industrielaan 22, 8000 Brugge', identityCard: '590-2233445-66' },
-  { id: 'w6', name: 'BOGAERT KRISTOF', type: 'employee', function: 'Bestuurder', hireDate: '07/11/2008', uurloon1: 28.75, uurloon2: 43.10, birthDate: '30/06/1978', address: 'Vissersweg 14, 8377 Zuienkerke', identityCard: '590-3344556-77' },
-  { id: 'w7', name: 'KIMPE MANUEL', type: 'subcontractor', function: 'Bestuurder', hireDate: '14/02/2022', uurloon1: 48.50, uurloon2: 60.00, birthDate: '11/02/1990', address: 'Stationsplein 3, 8000 Brugge', identityCard: '590-4455667-88' },
-  { id: 'w8', name: 'OA HAECK JAN', type: 'employee', function: 'Chauffeur', hireDate: '22/08/2016', uurloon1: 23.50, uurloon2: 35.25, birthDate: '25/08/1972', address: 'Polderdreef 7, 8377 Houtave', identityCard: '590-5566778-99' }
+  { id: 'w1', name: 'DEBRUYCKER', type: 'employee', function: 'Bestuurder', hireDate: '15/03/2018', uurloon1: 24.50, uurloon2: 36.75, birthDate: '12/05/1985', address: 'Brugsesteenweg 12, 8377 Zuienkerke', identityCard: '590-0123456-87', pin: '100001', pinAttempts: 0, pinBlocked: false },
+  { id: 'w2', name: 'EECKLOO FREDERIK', type: 'employee', function: 'Bestuurder', hireDate: '01/06/2015', uurloon1: 26.00, uurloon2: 39.00, birthDate: '23/09/1980', address: 'Kerkstraat 45, 8377 Meetkerke', identityCard: '590-0987654-21', pin: '100002', pinAttempts: 0, pinBlocked: false },
+  { id: 'w3', name: 'INGELBRECHT BART', type: 'employee', function: 'Bestuurder', hireDate: '12/09/2011', uurloon1: 27.50, uurloon2: 41.25, birthDate: '07/11/1975', address: 'Dorpsstraat 8, 8200 Brugge', identityCard: '590-1122334-55', pin: '100003', pinAttempts: 0, pinBlocked: false },
+  { id: 'w4', name: 'DEMEULENAERE GINO', type: 'subcontractor', function: 'Bestuurder', hireDate: '20/01/2020', uurloon1: 52.00, uurloon2: 65.00, birthDate: '19/03/1982', address: 'Industrielaan 22, 8000 Brugge', identityCard: '590-2233445-66', pin: '100004', pinAttempts: 0, pinBlocked: false },
+  { id: 'w6', name: 'BOGAERT KRISTOF', type: 'employee', function: 'Bestuurder', hireDate: '07/11/2008', uurloon1: 28.75, uurloon2: 43.10, birthDate: '30/06/1978', address: 'Vissersweg 14, 8377 Zuienkerke', identityCard: '590-3344556-77', pin: '100005', pinAttempts: 0, pinBlocked: false },
+  { id: 'w7', name: 'KIMPE MANUEL', type: 'subcontractor', function: 'Bestuurder', hireDate: '14/02/2022', uurloon1: 48.50, uurloon2: 60.00, birthDate: '11/02/1990', address: 'Stationsplein 3, 8000 Brugge', identityCard: '590-4455667-88', pin: '100006', pinAttempts: 0, pinBlocked: false },
+  { id: 'w8', name: 'OA HAECK JAN', type: 'employee', function: 'Chauffeur', hireDate: '22/08/2016', uurloon1: 23.50, uurloon2: 35.25, birthDate: '25/08/1972', address: 'Polderdreef 7, 8377 Houtave', identityCard: '590-5566778-99', pin: '100007', pinAttempts: 0, pinBlocked: false }
 ];
 
 export const seedMachines = [
@@ -181,8 +187,7 @@ export const seedServices = [
   { id: 's1', code: 'MAN-01', name: 'Manuren standaard', description: 'Bestuurder uurloon basis', rate: 45, unit: 'uur', vat: 21, active: true },
   { id: 's2', code: 'MAN-02', name: 'Manuren overuren', description: 'Bestuurder met overuren', rate: 65, unit: 'uur', vat: 21, active: true },
   { id: 's3', code: 'TRP-01', name: 'Transport / verzet', description: 'Verzet machine naar werf', rate: 95, unit: 'forfait', vat: 21, active: true },
-  { id: 's4', code: 'BEG-01', name: 'Voertuig begeleiding uitz. vervoer', description: 'Begeleidingsvoertuig uitzonderlijk vervoer', rate: 85, unit: 'uur', vat: 21, active: true },
-  { id: 's5', code: 'KM-01', name: 'Kilometervergoeding', description: 'Verplaatsing buiten werf', rate: 0.65, unit: 'km', vat: 21, active: true }
+  { id: 's4', code: 'BEG-01', name: 'Voertuig begeleiding uitz. vervoer', description: 'Begeleidingsvoertuig uitzonderlijk vervoer', rate: 85, unit: 'uur', vat: 21, active: true }
 ];
 
 // Artikelen — klein materieel dat extra meegegeven wordt naast de hoofdmachine

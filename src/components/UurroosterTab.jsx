@@ -74,26 +74,108 @@ export default function UurroosterTab({ werkbonnen, workers, machines, klanten, 
     setEditing(null);
   };
 
-  // Export: CSV
+  // Export: XLSX (mooi geformatteerd, geen ruwe CSV meer)
   const exportCSV = () => {
-    const cols = ['Datum', 'Naam', 'Werf', 'Klant', 'Fiche', 'Bon', 'Machine', 'Tarief', 'Bedrag', 'Nota'];
-    const rows = filtered.map(wb => [
-      wb.date, wb.worker, wb.werf, wb.klant,
-      (wb.fiche || 0).toFixed(2).replace('.', ','),
-      (wb.bon || 0).toFixed(2).replace('.', ','),
-      wb.machine,
-      (wb.rate || 0).toFixed(2).replace('.', ','),
-      ((wb.bon || 0) * (wb.rate || 0)).toFixed(2).replace('.', ','),
-      wb.nota || ''
-    ]);
-    const csv = [cols, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `uurrooster_${vanDate.replace(/\//g, '-')}_${totDate.replace(/\//g, '-')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Lazy import om bundle-grootte niet te beïnvloeden in andere flows
+    import('xlsx').then(XLSX => {
+      const wb = XLSX.utils.book_new();
+      const headerRows = [
+        ['DEMAECKER & VAN HAECKE — Uurrooster export'],
+        [`Periode: ${vanDate} — ${totDate}`],
+        [`Geëxporteerd op: ${new Date().toLocaleString('nl-BE')}`],
+        []
+      ];
+      const cols = ['Datum', 'Naam', 'Werf', 'Klant', 'Fiche-uren', 'Bon-uren', 'Machine', 'Tarief (€)', 'Bedrag (€)', 'Status', 'Nota'];
+      headerRows.push(cols);
+
+      const dataStartRow = headerRows.length + 1; // 1-indexed Excel row van eerste datarij
+      filtered.forEach(wb => {
+        const fiche = Number(wb.fiche) || 0;
+        const bon = Number(wb.bon) || 0;
+        const rate = Number(wb.rate) || 0;
+        headerRows.push([
+          wb.date,
+          wb.worker,
+          wb.werf,
+          wb.klant,
+          fiche,
+          bon,
+          wb.machine,
+          rate,
+          bon * rate,
+          statusLabel(wb.status),
+          wb.nota || ''
+        ]);
+      });
+
+      // Totals row
+      const lastDataRow = dataStartRow + filtered.length - 1;
+      if (filtered.length > 0) {
+        headerRows.push([]);
+        headerRows.push([
+          '', '', '', 'TOTAAL',
+          { f: `SUM(E${dataStartRow}:E${lastDataRow})` },
+          { f: `SUM(F${dataStartRow}:F${lastDataRow})` },
+          '',
+          '',
+          { f: `SUM(I${dataStartRow}:I${lastDataRow})` },
+          '', ''
+        ]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(headerRows);
+
+      // Column widths
+      ws['!cols'] = [
+        { wch: 12 },  // Datum
+        { wch: 22 },  // Naam
+        { wch: 24 },  // Werf
+        { wch: 22 },  // Klant
+        { wch: 11 },  // Fiche
+        { wch: 11 },  // Bon
+        { wch: 18 },  // Machine
+        { wch: 12 },  // Tarief
+        { wch: 14 },  // Bedrag
+        { wch: 14 },  // Status
+        { wch: 30 }   // Nota
+      ];
+
+      // Number formatting: kolommen E,F = uren met 2 decimalen; H,I = euro
+      const lastRow = headerRows.length;
+      for (let r = dataStartRow; r <= lastRow; r++) {
+        ['E', 'F'].forEach(col => {
+          const cell = ws[`${col}${r}`];
+          if (cell && typeof cell.v === 'number') cell.z = '0.00';
+        });
+        ['H', 'I'].forEach(col => {
+          const cell = ws[`${col}${r}`];
+          if (cell && typeof cell.v === 'number') cell.z = '"€" #,##0.00';
+        });
+      }
+
+      // Title row merge: A1:K1
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 10 } }
+      ];
+
+      // Freeze header row (row 5 = first data row)
+      ws['!freeze'] = { xSplit: 0, ySplit: 4 };
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Uurrooster');
+      const filename = `uurrooster_${vanDate.replace(/\//g, '-')}_${totDate.replace(/\//g, '-')}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    });
   };
+
+  // Helper: leesbare status-labels in plaats van interne codes
+  const statusLabel = (s) => ({
+    submitted: 'Ingediend',
+    approved: 'Goedgekeurd',
+    rejected: 'Afgewezen',
+    unknown: 'Te bevestigen'
+  }[s] || s || '');
 
   const exportPDF = () => {
     // Simple print-to-PDF via browser
@@ -378,7 +460,7 @@ export default function UurroosterTab({ werkbonnen, workers, machines, klanten, 
       <div className="bg-slate-100 border-t border-slate-200 px-4 py-2 flex items-center gap-3 text-xs">
         <span className="text-slate-500">{filtered.length} regels</span>
         <button onClick={exportCSV} className="ml-auto px-3 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50">
-          📊 Excel/CSV
+          📊 Excel export
         </button>
         <button onClick={exportPDF} className="px-3 py-1 rounded border border-slate-300 bg-white hover:bg-slate-50">
           🖨 PDF
