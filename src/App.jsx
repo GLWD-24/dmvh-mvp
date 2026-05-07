@@ -547,18 +547,25 @@ export default function App() {
   };
 
   // Mobile handlers
-  const mobileClockIn = (werf, machine) => {
+  // De werknemer kiest een werf op de today-tegels en krijgt een leeg bon-formulier.
+  const mobileClockIn = (werf, machine, assignment) => {
     setMobile({
       screen: 'werkbon',
       currentWerkbon: {
-        klant: werf.klant, werf: werf.address, machine: machine?.code || '—',
-        hours: 0,
-        phase: 'idle',
-        segments: [],
-        pauses: [],
+        klant: werf.klant,
+        werf: werf.omschrijving || werf.address,
+        werfId: werf.id,
+        assignmentId: assignment?.id || null,
+        machine: machine?.code || '—',
+        // Form fields — leeg bij start, werknemer vult ze in
+        startStr: '',
+        endStr: '',
+        pauseMin: '',
         remarks: '',
+        werfleiderAfwezig: false,
         opSign: false,
-        clientSign: false
+        werfleiderSign: false,
+        hours: 0
       }
     });
   };
@@ -570,9 +577,23 @@ export default function App() {
     if (action === 'submit') {
       const newNr = 431723 + werkbonnen.length + 1;
       setWerkbonnen(prev => [...prev, {
-        id: 'wb-' + Date.now(), nr: newNr, klant: wb.klant, werf: wb.werf,
-        worker: 'EECKLOO FREDERIK', machine: wb.machine,
-        date: '04/05/2026', fiche: wb.hours, bon: wb.hours, rate: 85, status: 'submitted', nota: wb.remarks || '', incomingInvoiceId: null
+        id: 'wb-' + Date.now(),
+        nr: newNr,
+        klant: wb.klant,
+        werf: wb.werf,
+        worker: 'EECKLOO FREDERIK',
+        machine: wb.machine,
+        date: '04/05/2026',
+        fiche: wb.hours,
+        bon: wb.hours,
+        rate: 85,
+        status: 'submitted',
+        nota: wb.remarks || '',
+        startStr: wb.startStr,
+        endStr: wb.endStr,
+        pauseMin: wb.pauseMin,
+        werfleiderAfwezig: !!wb.werfleiderAfwezig,
+        incomingInvoiceId: null
       }]);
       setMobile({ screen: 'submitted', currentWerkbon: null });
       setStatus({ text: 'Werkbon ingediend', kind: 'success' });
@@ -651,6 +672,7 @@ export default function App() {
             werven={decoratedWerven}
             workers={workers}
             machines={machines}
+            artikelen={artikelen}
             werkbonnen={werkbonnen}
             proposals={proposals}
             onNavigate={setTab}

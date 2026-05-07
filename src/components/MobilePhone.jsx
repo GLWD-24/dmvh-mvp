@@ -1,6 +1,38 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-function SignaturePad({ label, signed, onSign }) {
+/**
+ * Werknemer-app — vereenvoudigde flow voor einde-van-de-dag invullen.
+ *
+ * Schermen:
+ *  - 'today'      : tegels van werven waar EECKLOO FREDERIK vandaag op staat
+ *  - 'werkbon'    : bon-formulier voor één gekozen werf
+ *  - 'submitted'  : bevestiging na indienen
+ *
+ * Filosofie: geen knoppen tijdens de dag (de werknemer vergeet ze toch). De bon wordt
+ * 's avonds ingevuld met start-uur, eind-uur, pauzeminuten, opmerking, en handtekeningen.
+ * Werfleider-niet-aanwezig disabled de werfleider-handtekening.
+ */
+
+const HARDCODED_WORKER_NAME = 'EECKLOO FREDERIK';
+
+// HH:MM string parser (geeft minuten-since-midnight terug, of null)
+const parseHM = (s) => {
+  if (!s || typeof s !== 'string') return null;
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+};
+
+// Decimaal uren formatteren (vb. 7.53 u)
+const fmtHours = (decHours) => {
+  if (decHours === null || decHours === undefined || isNaN(decHours)) return '—';
+  return `${decHours.toFixed(2).replace('.', ',')} u`;
+};
+
+function SignaturePad({ label, signed, onSign, disabled = false }) {
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
@@ -14,7 +46,7 @@ function SignaturePad({ label, signed, onSign }) {
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
-  }, []);
+  }, [disabled]);
 
   const getPos = (e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -22,9 +54,14 @@ function SignaturePad({ label, signed, onSign }) {
     return { x: t.clientX - rect.left, y: t.clientY - rect.top };
   };
 
-  const start = (e) => { e.preventDefault(); drawingRef.current = true; lastPosRef.current = getPos(e); };
+  const start = (e) => {
+    if (disabled) return;
+    e.preventDefault();
+    drawingRef.current = true;
+    lastPosRef.current = getPos(e);
+  };
   const move = (e) => {
-    if (!drawingRef.current) return;
+    if (!drawingRef.current || disabled) return;
     e.preventDefault();
     const ctx = canvasRef.current.getContext('2d');
     const pos = getPos(e);
@@ -34,7 +71,12 @@ function SignaturePad({ label, signed, onSign }) {
     ctx.stroke();
     lastPosRef.current = pos;
   };
-  const end = () => { if (drawingRef.current) { drawingRef.current = false; onSign(); } };
+  const end = () => {
+    if (drawingRef.current && !disabled) {
+      drawingRef.current = false;
+      onSign();
+    }
+  };
 
   return (
     <div>
@@ -43,41 +85,32 @@ function SignaturePad({ label, signed, onSign }) {
         ref={canvasRef}
         onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
         onTouchStart={start} onTouchMove={move} onTouchEnd={end}
-        className={`w-full h-12 rounded border ${signed ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 bg-white'}`}
+        className={`w-full h-14 rounded border ${
+          disabled ? 'border-slate-200 bg-slate-50 cursor-not-allowed'
+          : signed ? 'border-emerald-400 bg-emerald-50' : 'border-slate-300 bg-white'
+        }`}
       />
     </div>
   );
 }
 
-// Format milliseconds → HH:MM (geen seconden, scheelt re-renders)
-const fmtTime = (ms) => {
-  const total = Math.max(0, Math.floor(ms / 60000)); // total minutes
-  const h = String(Math.floor(total / 60)).padStart(2, '0');
-  const m = String(total % 60).padStart(2, '0');
-  return `${h}:${m}`;
-};
-
-// Format Unix timestamp → HH:MM (lokale tijd) voor tonen "gestart om 07:32"
-const fmtClock = (ts) => {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-
-// Decimal hours from ms (e.g. 7,53) — what gets stored as werkbon.hours
-const hoursFromMs = (ms) => Math.round((ms / 3600000) * 100) / 100;
-
 export default function MobilePhone({
-  state, werven, workers, machines,
+  state, werven, workers, machines, artikelen = [],
   onClockIn, onSubmitWerkbon, onReset
 }) {
-  const myAssignment = werven.find(w => w.assignments.some(a => {
-    const wk = workers.find(x => x.id === a.workerId);
-    return wk && wk.name === 'EECKLOO FREDERIK';
-  }));
+  // Vind alle werven van vandaag waar de hardcoded werknemer op staat
+  const myAssignments = [];
+  werven.forEach(w => {
+    (w.assignments || []).forEach(a => {
+      const wk = workers.find(x => x.id === a.workerId);
+      if (wk && wk.name === HARDCODED_WORKER_NAME) {
+        myAssignments.push({ werf: w, assignment: a });
+      }
+    });
+  });
 
   const renderToday = () => {
-    if (!myAssignment) {
+    if (myAssignments.length === 0) {
       return (
         <div className="text-center px-3 py-12 text-[11px] text-slate-500">
           Geen toewijzing voor vandaag.<br /><br />
@@ -85,32 +118,47 @@ export default function MobilePhone({
         </div>
       );
     }
-    const a = myAssignment.assignments.find(x => workers.find(w => w.id === x.workerId)?.name === 'EECKLOO FREDERIK');
-    const machine = machines.find(m => m.id === a.machineId);
 
     return (
       <div className="p-3">
-        <div className="text-[10px] text-slate-500">Vandaag · maandag 4 mei</div>
-        <div className="text-sm font-semibold mt-1">{myAssignment.klant}</div>
-        <div className="text-[11px] text-slate-500 mb-3">{myAssignment.address}</div>
-        <div className="bg-slate-100 rounded-lg p-2 mb-2">
-          <div className="text-[10px] text-slate-500">Machine</div>
-          <div className="text-xs font-semibold">{machine ? machine.code : '—'}</div>
+        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Vandaag · maandag 4 mei</div>
+        <div className="text-[11px] text-slate-600 mb-3">
+          {myAssignments.length === 1
+            ? '1 werf — vul je bon in'
+            : `${myAssignments.length} werven — kies welke je wil afsluiten`}
         </div>
-        <button className="w-full py-2 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium mb-2 hover:bg-slate-200">
-          📍 Navigeer
-        </button>
-        <button
-          onClick={() => onClockIn(myAssignment, machine)}
-          className="w-full py-2 rounded-lg bg-blue-600 text-white text-[11px] font-medium hover:bg-blue-700"
-        >
-          Inklokken &amp; werkbon openen
-        </button>
+        <div className="flex flex-col gap-2">
+          {myAssignments.map(({ werf, assignment }) => {
+            const machine = machines.find(m => m.id === assignment.machineId);
+            return (
+              <button
+                key={`${werf.id}-${assignment.id}`}
+                onClick={() => onClockIn(werf, machine, assignment)}
+                className="w-full text-left bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:bg-blue-50/50 active:bg-blue-100 transition"
+              >
+                <div className="text-[12px] font-semibold text-slate-900">{werf.klant}</div>
+                <div className="text-[10px] text-slate-500 mb-1.5">{werf.omschrijving || werf.address}</div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {machine && (
+                    <span className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                      {machine.color && <span className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: machine.color }} />}
+                      {machine.code}
+                    </span>
+                  )}
+                  {!machine && (
+                    <span className="text-[10px] text-slate-400 italic">geen machine</span>
+                  )}
+                </div>
+                <div className="text-[10px] text-blue-700 mt-2 font-medium">Bon invullen →</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   };
 
-  const renderWerkbon = () => <WerkbonScreen wb={state.currentWerkbon} onUpdate={onSubmitWerkbon} />;
+  const renderWerkbon = () => <WerkbonForm wb={state.currentWerkbon} onUpdate={onSubmitWerkbon} />;
 
   const renderSubmitted = () => (
     <div className="text-center px-3 py-8">
@@ -141,287 +189,178 @@ export default function MobilePhone({
   );
 }
 
-function WerkbonScreen({ wb, onUpdate }) {
-  // Werkbon state machine: idle | running | paused | stopped
-  const phase = wb?.phase || 'idle';
-
-  // Battery-friendly UI ticker:
-  // - Updates only every 30 seconds (not every second)
-  // - Pauses when tab/screen is hidden (page visibility API)
-  // - Triggers a single re-render on visibility change to catch up
-  // - State (start/stop times) is stored as timestamps, never as accumulating elapsed values,
-  //   so the clock recovers correctly across reloads, sleep, or backgrounding.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (phase !== 'running') return;
-
-    let intervalId = null;
-    const startTicker = () => {
-      if (intervalId) return;
-      intervalId = setInterval(() => setTick(t => t + 1), 30000); // 30s
-    };
-    const stopTicker = () => {
-      if (intervalId) { clearInterval(intervalId); intervalId = null; }
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        setTick(t => t + 1); // catch-up render
-        startTicker();
-      } else {
-        stopTicker(); // suspend ticker when phone in pocket / app backgrounded
-      }
-    };
-
-    if (document.visibilityState === 'visible') startTicker();
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      stopTicker();
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [phase]);
-
+/**
+ * WerkbonForm — einde-van-de-dag formulier.
+ * Velden: start-uur, eind-uur, pauze (minuten), opmerking, werfleider afwezig, 2 handtekeningen.
+ * Berekent automatisch totaal-uren = (eind - start) - pauze.
+ */
+function WerkbonForm({ wb, onUpdate }) {
   if (!wb) return null;
 
-  // Compute elapsed work time (excluding pauses)
-  const computeElapsed = () => {
-    const segments = wb.segments || [];
-    let total = 0;
-    segments.forEach(seg => {
-      if (seg.end) total += seg.end - seg.start;
-      else if (phase === 'running') total += Date.now() - seg.start;
-    });
-    return total;
-  };
-  const elapsedMs = computeElapsed();
+  const startMin = parseHM(wb.startStr);
+  const endMin = parseHM(wb.endStr);
+  const pauseMin = parseInt(wb.pauseMin || '0', 10) || 0;
 
-  // Compute total pause time
-  const pauseMs = (() => {
-    const pauses = wb.pauses || [];
-    let total = 0;
-    pauses.forEach(p => {
-      if (p.end) total += p.end - p.start;
-      else if (phase === 'paused') total += Date.now() - p.start;
-    });
-    return total;
-  })();
+  // Compute totaal in minuten en in decimale uren
+  let totalMin = null;
+  let totalErr = null;
+  if (startMin !== null && endMin !== null) {
+    if (endMin <= startMin) {
+      totalErr = 'Eind-uur moet na start-uur';
+    } else {
+      const grossMin = endMin - startMin;
+      if (pauseMin >= grossMin) {
+        totalErr = 'Pauze is langer dan werktijd';
+      } else {
+        totalMin = grossMin - pauseMin;
+      }
+    }
+  }
+  const totalHours = totalMin !== null ? Math.round((totalMin / 60) * 100) / 100 : null;
 
-  const handleStart = () => {
-    const now = Date.now();
-    onUpdate({
-      ...wb,
-      phase: 'running',
-      startTime: now,
-      segments: [{ start: now, end: null }],
-      pauses: []
-    }, 'update');
-  };
+  const canSubmit =
+    totalHours !== null &&
+    totalHours > 0 &&
+    !!wb.opSign &&
+    (wb.werfleiderAfwezig || !!wb.werfleiderSign);
 
-  const handlePause = () => {
-    const now = Date.now();
-    const segments = (wb.segments || []).map(s =>
-      s.end === null ? { ...s, end: now } : s
-    );
-    const pauses = [...(wb.pauses || []), { start: now, end: null }];
-    onUpdate({ ...wb, phase: 'paused', segments, pauses }, 'update');
-  };
-
-  const handleResume = () => {
-    const now = Date.now();
-    const pauses = (wb.pauses || []).map(p =>
-      p.end === null ? { ...p, end: now } : p
-    );
-    const segments = [...(wb.segments || []), { start: now, end: null }];
-    onUpdate({ ...wb, phase: 'running', segments, pauses }, 'update');
-  };
-
-  const handleStop = () => {
-    const now = Date.now();
-    const segments = (wb.segments || []).map(s =>
-      s.end === null ? { ...s, end: now } : s
-    );
-    const pauses = (wb.pauses || []).map(p =>
-      p.end === null ? { ...p, end: now } : p
-    );
-    // Recompute final elapsed time from completed segments
-    const finalMs = segments.reduce((sum, s) => sum + (s.end - s.start), 0);
-    onUpdate({
-      ...wb,
-      phase: 'stopped',
-      segments,
-      pauses,
-      hours: hoursFromMs(finalMs),
-      stopTime: now
-    }, 'update');
+  const handleField = (patch) => {
+    onUpdate({ ...wb, ...patch }, 'update');
   };
 
   const handleSubmit = () => {
-    onUpdate(wb, 'submit');
+    if (!canSubmit) return;
+    onUpdate({ ...wb, hours: totalHours }, 'submit');
   };
 
   return (
     <div className="p-3">
       <div className="text-xs font-semibold mb-2">Werkbon</div>
+
+      {/* Werf-info */}
       <div className="text-[10px] bg-slate-100 rounded-lg p-2 mb-3 leading-relaxed">
-        <div><span className="text-slate-500">Klant:</span> {wb.klant}</div>
+        <div><span className="text-slate-500">Klant:</span> <span className="font-medium">{wb.klant}</span></div>
         <div><span className="text-slate-500">Werf:</span> {wb.werf}</div>
-        <div><span className="text-slate-500">Machine:</span> {wb.machine}</div>
+        {wb.machine && wb.machine !== '—' && (
+          <div><span className="text-slate-500">Machine:</span> {wb.machine}</div>
+        )}
         <div><span className="text-slate-500">Datum:</span> 04/05/2026</div>
       </div>
 
-      {/* Live timer display */}
-      <div className={`rounded-lg p-3 mb-3 text-center ${
-        phase === 'running' ? 'bg-emerald-50 border border-emerald-200' :
-        phase === 'paused' ? 'bg-amber-50 border border-amber-200' :
-        phase === 'stopped' ? 'bg-slate-100 border border-slate-300' :
-        'bg-slate-50 border border-slate-200'
-      }`}>
-        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">
-          {phase === 'idle' && 'Klaar om te starten'}
-          {phase === 'running' && <span className="text-emerald-700">● Bezig</span>}
-          {phase === 'paused' && <span className="text-amber-700">⏸ Gepauzeerd</span>}
-          {phase === 'stopped' && 'Gestopt — bevestiging vereist'}
+      {/* Tijden */}
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label className="text-[9px] text-slate-500 uppercase tracking-wider">Start uur</label>
+          <input
+            type="time"
+            value={wb.startStr || ''}
+            onChange={e => handleField({ startStr: e.target.value })}
+            className="w-full text-sm p-1.5 border border-slate-300 rounded mt-0.5"
+          />
         </div>
-        <div className={`font-mono text-3xl font-semibold tabular-nums tracking-tight ${
-          phase === 'running' ? 'text-emerald-800' :
-          phase === 'paused' ? 'text-amber-800' :
-          'text-slate-800'
-        }`}>
-          {fmtTime(elapsedMs)}
+        <div>
+          <label className="text-[9px] text-slate-500 uppercase tracking-wider">Eind uur</label>
+          <input
+            type="time"
+            value={wb.endStr || ''}
+            onChange={e => handleField({ endStr: e.target.value })}
+            className="w-full text-sm p-1.5 border border-slate-300 rounded mt-0.5"
+          />
         </div>
-        {wb.startTime && phase !== 'idle' && (
-          <div className="text-[9px] text-slate-500 mt-1">
-            Gestart om {fmtClock(wb.startTime)}
-            {phase === 'stopped' && wb.stopTime && <> · gestopt om {fmtClock(wb.stopTime)}</>}
-          </div>
-        )}
-        {pauseMs > 0 && (
-          <div className="text-[9px] text-slate-500 mt-0.5">
-            Totaal pauze: {fmtTime(pauseMs)}
-          </div>
-        )}
       </div>
 
-      {/* Buttons by phase */}
-      {phase === 'idle' && (
-        <button
-          onClick={handleStart}
-          className="w-full py-3 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:bg-emerald-800 flex items-center justify-center gap-2"
-        >
-          ▶ START
-        </button>
-      )}
+      {/* Pauze */}
+      <div className="mb-2">
+        <label className="text-[9px] text-slate-500 uppercase tracking-wider">Pauze (minuten)</label>
+        <input
+          type="number"
+          min="0"
+          step="5"
+          value={wb.pauseMin || ''}
+          onChange={e => handleField({ pauseMin: e.target.value })}
+          placeholder="0"
+          className="w-full text-sm p-1.5 border border-slate-300 rounded mt-0.5"
+        />
+      </div>
 
-      {phase === 'running' && (
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <button
-            onClick={handlePause}
-            className="py-3 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 active:bg-amber-700 flex items-center justify-center gap-1"
-          >
-            ⏸ PAUZE
-          </button>
-          <button
-            onClick={handleStop}
-            className="py-3 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 active:bg-red-800 flex items-center justify-center gap-1"
-          >
-            ■ STOP
-          </button>
+      {/* Totaal preview */}
+      <div className={`rounded-lg p-2.5 mb-3 text-center border ${
+        totalErr ? 'bg-red-50 border-red-200' :
+        totalHours !== null ? 'bg-emerald-50 border-emerald-200' :
+        'bg-slate-50 border-slate-200'
+      }`}>
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-0.5">
+          {totalErr ? <span className="text-red-700">Fout</span> : 'Totaal werktijd'}
         </div>
-      )}
-
-      {/* Demo helper: visible only while running, fast-forwards the clock by 1h */}
-      {(phase === 'running' || phase === 'paused') && (
-        <button
-          onClick={() => {
-            const segments = (wb.segments || []).map((s, i, arr) => {
-              if (i === arr.length - 1) {
-                // shift the start time back by 1h to simulate elapsed time
-                return { ...s, start: s.start - 3600000 };
-              }
-              return s;
-            });
-            onUpdate({ ...wb, segments }, 'update');
-          }}
-          className="w-full py-1.5 rounded-md bg-slate-100 text-slate-500 text-[10px] hover:bg-slate-200 mb-2 border border-dashed border-slate-300"
-          title="Demo: voeg 1 uur toe aan de tijdregistratie"
-        >
-          🚀 Demo +1u (alleen voor prototype)
-        </button>
-      )}
-
-      {phase === 'paused' && (
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <button
-            onClick={handleResume}
-            className="py-3 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 active:bg-emerald-800 flex items-center justify-center gap-1"
-          >
-            ▶ HERVAT
-          </button>
-          <button
-            onClick={handleStop}
-            className="py-3 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 active:bg-red-800 flex items-center justify-center gap-1"
-          >
-            ■ STOP
-          </button>
+        <div className={`text-2xl font-mono font-semibold tabular-nums ${
+          totalErr ? 'text-red-700' :
+          totalHours !== null ? 'text-emerald-800' : 'text-slate-400'
+        }`}>
+          {totalErr ? '—' : totalHours !== null ? fmtHours(totalHours) : '—'}
         </div>
-      )}
+        {totalErr && <div className="text-[10px] text-red-700 mt-1">{totalErr}</div>}
+      </div>
 
-      {/* Stopped → confirmation summary + signatures + submit */}
-      {phase === 'stopped' && (
-        <div>
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">Samenvatting</div>
-            <div className="flex justify-between text-[11px] mb-0.5">
-              <span className="text-slate-600">Gestart</span>
-              <span className="font-mono">{fmtClock(wb.startTime)}</span>
-            </div>
-            <div className="flex justify-between text-[11px] mb-0.5">
-              <span className="text-slate-600">Gestopt</span>
-              <span className="font-mono">{fmtClock(wb.stopTime)}</span>
-            </div>
-            {pauseMs > 0 && (
-              <div className="flex justify-between text-[11px] mb-0.5 text-slate-500">
-                <span>Totaal pauze</span>
-                <span className="font-mono">{fmtTime(pauseMs)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-[11px] pt-1.5 mt-1 border-t border-slate-200">
-              <span className="text-slate-700 font-medium">Netto werktijd</span>
-              <span className="font-mono font-semibold">{fmtTime(elapsedMs)} ({wb.hours?.toFixed(2)} u)</span>
-            </div>
-          </div>
+      {/* Opmerking */}
+      <label className="text-[9px] text-slate-500 uppercase tracking-wider">Opmerking</label>
+      <textarea
+        rows={2}
+        value={wb.remarks || ''}
+        onChange={e => handleField({ remarks: e.target.value })}
+        placeholder="Optioneel — bv. extra werken, materiaal achtergelaten..."
+        className="w-full text-xs p-1.5 border border-slate-300 rounded mt-0.5 mb-3"
+      />
 
-          <label className="text-[10px] text-slate-500">Opmerkingen</label>
-          <textarea
-            rows={2}
-            value={wb.remarks || ''}
-            onChange={e => onUpdate({ ...wb, remarks: e.target.value }, 'update')}
-            placeholder="Optioneel — bv. extra werken..."
-            className="w-full text-xs p-1.5 border border-slate-300 rounded mb-3"
-          />
+      {/* Werfleider afwezig */}
+      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={!!wb.werfleiderAfwezig}
+          onChange={e => handleField({
+            werfleiderAfwezig: e.target.checked,
+            // Als werfleider afwezig wordt aangevinkt, wis zijn handtekening
+            werfleiderSign: e.target.checked ? false : wb.werfleiderSign
+          })}
+          className="w-4 h-4 rounded border-slate-300"
+        />
+        <span className="text-[11px] text-slate-700">Werfleider niet aanwezig</span>
+      </label>
 
-          <div className="text-[10px] font-semibold text-slate-700 mb-1">Handtekening &amp; afsluiten</div>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <SignaturePad label="Bestuurder" signed={wb.opSign} onSign={() => onUpdate({ ...wb, opSign: true }, 'update')} />
-            <SignaturePad label="Klant" signed={wb.clientSign} onSign={() => onUpdate({ ...wb, clientSign: true }, 'update')} />
-          </div>
+      {/* Handtekeningen */}
+      <div className="text-[10px] font-semibold text-slate-700 mb-1">Handtekening</div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <SignaturePad
+          label="Bestuurder"
+          signed={wb.opSign}
+          onSign={() => handleField({ opSign: true })}
+        />
+        <SignaturePad
+          label={wb.werfleiderAfwezig ? 'Werfleider (afwezig)' : 'Werfleider'}
+          signed={wb.werfleiderSign}
+          onSign={() => handleField({ werfleiderSign: true })}
+          disabled={!!wb.werfleiderAfwezig}
+        />
+      </div>
 
-          <button
-            onClick={handleSubmit}
-            disabled={!wb.opSign || !wb.clientSign}
-            className={`w-full py-2.5 rounded-lg text-[11px] font-semibold ${
-              wb.opSign && wb.clientSign
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            }`}
-          >
-            Werkbon definitief indienen
-          </button>
-          {(!wb.opSign || !wb.clientSign) && (
-            <div className="text-[9px] text-slate-500 text-center mt-1.5">
-              Beide handtekeningen vereist
-            </div>
-          )}
+      {/* Submit */}
+      <button
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className={`w-full py-2.5 rounded-lg text-[11px] font-semibold ${
+          canSubmit
+            ? 'bg-blue-600 text-white hover:bg-blue-700'
+            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+        }`}
+      >
+        Werkbon definitief indienen
+      </button>
+      {!canSubmit && (
+        <div className="text-[9px] text-slate-500 text-center mt-1.5">
+          {totalHours === null ? 'Vul start- en eind-uur in' :
+           totalErr ? 'Corrigeer de tijden' :
+           !wb.opSign ? 'Bestuurder moet tekenen' :
+           !wb.werfleiderAfwezig && !wb.werfleiderSign ? 'Werfleider moet tekenen of vink "afwezig" aan' :
+           ''}
         </div>
       )}
     </div>
