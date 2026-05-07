@@ -25,10 +25,12 @@ export default function PlanningTab({
   onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment,
   onUpdateWerf,
   onCopyDay,
+  currentDate, onDateChange,
   onCreateWerf, onCreateWorker, onCreateMachine
 }) {
   const [splitDialog, setSplitDialog] = useState(null);
-  const [currentDate, setCurrentDate] = useState(todayDate());
+  // currentDate komt uit App.jsx als prop. Fallback voor backward-compat.
+  const setCurrentDate = onDateChange || (() => {});
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [printPreview, setPrintPreview] = useState(false);
 
@@ -94,10 +96,21 @@ export default function PlanningTab({
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
     const [kind, id, instanceKey] = data.split(':');
-    // If target specifies a row + slot (extra1/extra2), handle differently
-    if (target && target.assignmentId && (target.slot === 'extra1' || target.slot === 'extra2')) {
-      if (kind === 'artikel') {
-        onUpdateAssignment(target.assignmentId, { [target.slot + 'Id']: id });
+    // If target specifies a row + slot (extra1/extra2/machine/worker), handle differently
+    if (target && target.assignmentId && target.slot) {
+      if (target.slot === 'extra1' || target.slot === 'extra2') {
+        if (kind === 'artikel') {
+          onUpdateAssignment(target.assignmentId, { [target.slot + 'Id']: id });
+        }
+        return;
+      }
+      if (target.slot === 'machine' && kind === 'machine') {
+        onUpdateAssignment(target.assignmentId, { machineId: id });
+        return;
+      }
+      if (target.slot === 'worker' && kind === 'worker') {
+        onUpdateAssignment(target.assignmentId, { workerId: id, instanceKey: instanceKey || 'main' });
+        return;
       }
       return;
     }
@@ -271,11 +284,18 @@ export default function PlanningTab({
 
                         return (
                           <tr key={a.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 group">
-                            {/* Werknemer */}
+                            {/* Werknemer — drop zone + dubbelklik om te verwijderen */}
                             <td
                               className={`px-2 py-1.5 align-top ${(wk || isHemzelf) ? 'cursor-pointer hover:bg-blue-50' : ''}`}
                               onDoubleClick={() => { if (wk || isHemzelf) handleClearCell(a, 'worker'); }}
-                              title={(wk || isHemzelf) ? 'Dubbelklik om werknemer te verwijderen' : ''}
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-blue-100', 'ring-1', 'ring-blue-400'); }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('bg-blue-100', 'ring-1', 'ring-blue-400'); }}
+                              onDrop={e => {
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('bg-blue-100', 'ring-1', 'ring-blue-400');
+                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'worker' });
+                              }}
+                              title={(wk || isHemzelf) ? 'Dubbelklik om werknemer te verwijderen' : 'Sleep een werknemer hier'}
                             >
                               <div className="flex items-center gap-1 flex-wrap">
                                 {halfLabel && (
@@ -313,11 +333,18 @@ export default function PlanningTab({
                               </div>
                             </td>
 
-                            {/* Machine */}
+                            {/* Machine — drop zone + dubbelklik om te verwijderen */}
                             <td
-                              className={`px-2 py-1.5 align-top ${mc ? 'cursor-pointer hover:bg-red-50' : ''}`}
+                              className={`px-2 py-1.5 align-top ${mc ? 'cursor-pointer hover:bg-red-50' : 'bg-slate-50/30'}`}
                               onDoubleClick={() => { if (mc) handleClearCell(a, 'machine'); }}
-                              title={mc ? 'Dubbelklik om machine te verwijderen' : ''}
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-blue-100', 'ring-1', 'ring-blue-400'); }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('bg-blue-100', 'ring-1', 'ring-blue-400'); }}
+                              onDrop={e => {
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('bg-blue-100', 'ring-1', 'ring-blue-400');
+                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'machine' });
+                              }}
+                              title={mc ? 'Dubbelklik om machine te verwijderen' : 'Sleep een machine hier'}
                             >
                               {mc ? (
                                 <span className="inline-flex items-center gap-1">
@@ -1300,6 +1327,16 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
         <div className="bg-blue-900 text-white flex items-center justify-between px-3 py-2 mb-1">
           <span className="text-lg italic font-bold">Planning</span>
           <span className="text-sm font-semibold tracking-wide">{headerDate}</span>
+        </div>
+
+        {/* Kolomheaders */}
+        <div className="useit-row useit-header" style={{ borderBottom: '1px solid #475569', fontWeight: 700, fontSize: '10px', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '4px 0' }}>
+          <div className="indent" />
+          <div>Werknemer</div>
+          <div>Machine</div>
+          <div>Extra 1</div>
+          <div>Extra 2</div>
+          <div>Opmerking</div>
         </div>
 
         {/* Klant + werven blocks */}

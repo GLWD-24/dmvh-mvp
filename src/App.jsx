@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { seedKlanten, seedWerven, seedWorkers, seedMachines, seedWerkbonnen, seedIncomingInvoices, seedBedrijfsgegevens, seedServices, seedArtikelen } from './data/seed.js';
 import AppShell from './components/AppShell.jsx';
 import DashboardTab from './components/DashboardTab.jsx';
@@ -27,6 +27,52 @@ export default function App() {
   const [werkbonnen, setWerkbonnen] = useState(seedWerkbonnen);
   const [incomingInvoices] = useState(seedIncomingInvoices);
   const [proposals, setProposals] = useState([]);
+
+  // Datum-state (gelift uit PlanningTab) — bepaalt welke assignments getoond worden.
+  // assignmentsByDate is een map: { 'YYYY-MM-DD': { werfId: [assignment, ...] } }
+  // Wanneer de gebruiker naar een andere dag navigeert, wordt eerst de huidige dag-assignments
+  // opgeslagen, daarna worden de assignments van de nieuwe dag geladen (of leeg).
+  const todayKey = (() => {
+    const d = new Date(2026, 4, 4); // demo "today" = 4 mei 2026
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const dateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const [currentDateKey, setCurrentDateKey] = useState(todayKey);
+  const [assignmentsByDate, setAssignmentsByDate] = useState(() => {
+    // Initialiseer history met de seed-assignments onder de "today" key,
+    // zodat ze niet verloren gaan als de gebruiker naar een andere dag en terug navigeert.
+    const initial = {};
+    seedWerven.forEach(w => { initial[w.id] = w.assignments || []; });
+    return { [todayKey]: initial };
+  });
+
+  // Wanneer de datum verandert: huidige werven.assignments wegschrijven naar history
+  // onder de oude key, daarna currentDateKey aanpassen (de useEffect hieronder laadt
+  // dan automatisch de assignments van de nieuwe dag, of maakt ze leeg).
+  const handleDateChange = useCallback((newDate) => {
+    const newKey = dateKey(newDate);
+    if (newKey === currentDateKey) return;
+    // Snapshot de huidige werven.assignments onder de huidige (oude) key
+    const snapshot = {};
+    werven.forEach(w => { snapshot[w.id] = w.assignments || []; });
+    setAssignmentsByDate(prev => ({ ...prev, [currentDateKey]: snapshot }));
+    setCurrentDateKey(newKey);
+  }, [currentDateKey, werven]);
+
+  // Effect-vrije laad-logica: wanneer currentDateKey verandert, herlaadt werven.assignments
+  // vanuit assignmentsByDate. Omdat we geen useEffect willen voor deze MVP, doen we de laad-actie
+  // direct in handleDateChange via een tweede setter-callback die op de meest recente assignmentsByDate kijkt.
+  useEffect(() => {
+    setWerven(prev => prev.map(w => {
+      const stored = assignmentsByDate[currentDateKey];
+      if (stored && stored[w.id] !== undefined) {
+        return { ...w, assignments: stored[w.id] };
+      }
+      // Geen entry voor deze datum → lege planning
+      return { ...w, assignments: [] };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDateKey]);
 
   // Decorate werven with klant name from klanten lookup so components don't need refactoring
   const klantenById = klanten.reduce((acc, k) => { acc[k.id] = k; return acc; }, {});
@@ -116,17 +162,26 @@ export default function App() {
     setWerven(prev => prev.map(w => w.id === werfId ? { ...w, ...patch } : w));
   }, []);
 
-  // Kopieer hele dagplanning naar de volgende dag — voor nu betekent dat assignments
-  // bewaard blijven (geen historische snapshot per dag in MVP-state). Toaster bevestigt
-  // de actie. In productie zal dit een echte snapshot van de dag zijn.
+  // Kopieer hele dagplanning naar de volgende dag.
+  // Snapshot huidige werven.assignments → assignmentsByDate[nextDateKey]
   const handleCopyDay = useCallback((sourceDate) => {
-    // For demo purposes: simply confirm the action; assignments are already kept in werven state
-    // In production: snapshot werven assignments + dailyPool to next-day record
     const next = new Date(sourceDate);
     next.setDate(next.getDate() + 1);
+    const nextKey = dateKey(next);
+    setAssignmentsByDate(prev => {
+      const snapshot = {};
+      werven.forEach(w => {
+        // Deep-clone assignments en geef nieuwe ids zodat ze losstaan van vandaag
+        snapshot[w.id] = (w.assignments || []).map(a => ({
+          ...a,
+          id: 'a' + Date.now() + Math.random()
+        }));
+      });
+      return { ...prev, [nextKey]: snapshot };
+    });
     const dStr = `${String(next.getDate()).padStart(2, '0')}/${String(next.getMonth() + 1).padStart(2, '0')}/${next.getFullYear()}`;
     showToast(`Planning gekopieerd naar ${dStr}`);
-  }, []);
+  }, [werven]);
 
   const handleAddWerf = useCallback((data) => {
     const today = new Date(2026, 4, 4);
@@ -614,6 +669,8 @@ export default function App() {
             onUpdateAssignment={handleUpdateAssignment}
             onUpdateWerf={handleUpdateWerf}
             onCopyDay={handleCopyDay}
+            currentDate={(() => { const [y, m, d] = currentDateKey.split('-').map(Number); return new Date(y, m - 1, d); })()}
+            onDateChange={handleDateChange}
             onCreateWerf={handleCreateWerfFromPlanning}
             onCreateWorker={handleCreateWorkerFromPlanning}
             onCreateMachine={handleCreateMachineFromPlanning}
