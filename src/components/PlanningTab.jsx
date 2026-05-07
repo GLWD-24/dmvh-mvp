@@ -396,8 +396,11 @@ export default function PlanningTab({
                             </td>
 
                             {/* Opmerking */}
-                            <td className="px-2 py-1.5 align-top border-l border-slate-100 relative">
+                            <td className={`px-2 py-1.5 align-top border-l border-slate-100 relative ${a.tePhalen ? 'bg-orange-50' : ''}`}>
                               <div className="flex items-center gap-1">
+                                {a.tePhalen && (
+                                  <span className="text-[8px] font-bold px-1 rounded bg-orange-200 text-orange-900 shrink-0" title="Machine moet opgehaald worden">OPHALEN</span>
+                                )}
                                 <input
                                   type="text"
                                   value={a.opmerking || ''}
@@ -405,6 +408,13 @@ export default function PlanningTab({
                                   placeholder="—"
                                   className="flex-1 text-[10px] bg-transparent border-0 outline-none focus:bg-white focus:px-1 focus:rounded text-slate-700 placeholder-slate-300 min-w-0"
                                 />
+                                <button
+                                  onClick={() => onUpdateAssignment(a.id, { tePhalen: !a.tePhalen })}
+                                  className={`shrink-0 transition text-[12px] leading-none ${a.tePhalen ? 'text-orange-600 hover:text-orange-800' : 'text-slate-300 hover:text-orange-500 opacity-0 group-hover:opacity-100'}`}
+                                  title={a.tePhalen ? 'Niet meer markeren als op te halen' : 'Markeer als "machine moet opgehaald worden"'}
+                                >
+                                  🚛
+                                </button>
                                 <button
                                   onClick={() => onRemove(a.id)}
                                   className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0"
@@ -474,11 +484,14 @@ export default function PlanningTab({
           <div className="bg-blue-900 rounded-lg p-2">
             <div className="text-[10px] font-semibold text-blue-200 mb-2">WERKNEMERS</div>
             <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
-              {workerInstances.filter(w => dailyPool.workers.has(w.id)).map(w => {
+              {workerInstances
+                .filter(w => dailyPool.workers.has(w.id))
+                .filter(w => workerStatus(w.id, w.instanceKey) !== 'booked')
+                .map(w => {
                 const status = workerStatus(w.id, w.instanceKey);
                 const draggable = status !== 'booked';
                 const labelSuffix = status === 'am-only' ? ' (NM vrij)' : status === 'partial' ? ' (partieel)' : '';
-                const opacity = status === 'booked' ? 'opacity-30' : status === 'am-only' ? 'opacity-70' : '';
+                const opacity = status === 'am-only' ? 'opacity-70' : '';
                 const isSelected = selectedWorkerId === w.id && !w.isDuplicate;
                 return (
                   <div
@@ -559,8 +572,11 @@ export default function PlanningTab({
           <div className="bg-red-900 rounded-lg p-2">
             <div className="text-[10px] font-semibold text-red-200 mb-2">MACHINES</div>
             <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
-              {machines.filter(m => dailyPool.machines.has(m.id)).map(m => {
-                const taken = isMachineAssigned(m.id);
+              {machines
+                .filter(m => dailyPool.machines.has(m.id))
+                .filter(m => !isMachineAssigned(m.id))
+                .map(m => {
+                const taken = false; // already filtered out
                 const isSelected = selectedMachineId === m.id;
                 return (
                   <div
@@ -1275,6 +1291,7 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
       extra1: ex1?.code || '',
       extra2: ex2?.code || '',
       opmerking: a.opmerking || '',
+      tePhalen: !!a.tePhalen,
       isDup
     };
   };
@@ -1365,7 +1382,10 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
                           <div className={`useit-machine ${r.machineColor !== '#3B82F6' ? 'colored' : ''}`}>{r.machine}</div>
                           <div className="useit-artikel">{r.extra1}</div>
                           <div className="useit-artikel">{r.extra2}</div>
-                          <div className="text-slate-700">{r.opmerking}</div>
+                          <div className="text-slate-700">
+                            {r.tePhalen && <span style={{ color: '#9a3412', fontWeight: 700, fontSize: '9px', marginRight: '4px', textTransform: 'uppercase' }}>Ophalen</span>}
+                            {r.opmerking}
+                          </div>
                         </div>
                       );
                     })}
