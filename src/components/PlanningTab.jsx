@@ -20,9 +20,11 @@ const renderName = (workerName, half) => {
 };
 
 export default function PlanningTab({
-  werven, klanten, workers, machines,
+  werven, klanten, workers, machines, artikelen = [],
   dailyPool, onAddToPool, onRemoveFromPool,
   onAssign, onRemove, onSplit, onDuplicate, onUpdateAssignment,
+  onUpdateWerf,
+  onCopyDay,
   onCreateWerf, onCreateWorker, onCreateMachine
 }) {
   const [splitDialog, setSplitDialog] = useState(null);
@@ -34,11 +36,13 @@ export default function PlanningTab({
   const [selectedWerfId, setSelectedWerfId] = useState(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState(null);
   const [selectedMachineId, setSelectedMachineId] = useState(null);
+  const [selectedArtikelId, setSelectedArtikelId] = useState(null);
 
   // Popover state for + button
   const [addWerfPopover, setAddWerfPopover] = useState(false);
   const [addWorkerPopover, setAddWorkerPopover] = useState(false);
   const [addMachinePopover, setAddMachinePopover] = useState(false);
+  const [addArtikelPopover, setAddArtikelPopover] = useState(false);
 
   // "Create new" dialog state — triggered from inside the popover
   const [createWerfDialog, setCreateWerfDialog] = useState(false);
@@ -84,12 +88,19 @@ export default function PlanningTab({
 
   const isMachineAssigned = (id) => werven.some(w => w.assignments.some(a => a.machineId === id));
 
-  const handleDrop = (werfId, e) => {
+  const handleDrop = (werfId, e, target) => {
     e.preventDefault();
     e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-50');
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
     const [kind, id, instanceKey] = data.split(':');
+    // If target specifies a row + slot (extra1/extra2), handle differently
+    if (target && target.assignmentId && (target.slot === 'extra1' || target.slot === 'extra2')) {
+      if (kind === 'artikel') {
+        onUpdateAssignment(target.assignmentId, { [target.slot + 'Id']: id });
+      }
+      return;
+    }
     onAssign(werfId, kind, id, instanceKey);
   };
 
@@ -145,8 +156,19 @@ export default function PlanningTab({
 
         <span className="ml-auto text-xs text-slate-500">Sleep een werknemer + machine naar een werf</span>
         <button
+          onClick={() => {
+            if (window.confirm('Volledige planning van vandaag kopiëren naar morgen?\n\nDit kopieert alle werven, werknemers, machines en hun toewijzingen naar de volgende dag.')) {
+              if (onCopyDay) onCopyDay(currentDate);
+            }
+          }}
+          className="ml-2 px-3 py-1 text-xs rounded bg-blue-700 text-white hover:bg-blue-800 flex items-center gap-1"
+          title="Kopieer planning van vandaag naar morgen"
+        >
+          ⇒ Kopieer naar morgen
+        </button>
+        <button
           onClick={handlePrint}
-          className="ml-2 px-3 py-1 text-xs rounded bg-slate-800 text-white hover:bg-slate-900 flex items-center gap-1"
+          className="ml-1 px-3 py-1 text-xs rounded bg-slate-800 text-white hover:bg-slate-900 flex items-center gap-1"
           title="Dagplanning afdrukken"
         >
           🖨 Print PDF
@@ -163,7 +185,7 @@ export default function PlanningTab({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Werven</div>
           <div className="flex flex-col gap-2">
@@ -173,104 +195,190 @@ export default function PlanningTab({
               <div
                 key={w.id}
                 onClick={() => setSelectedWerfId(isSelected ? null : w.id)}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-blue-400', 'bg-blue-50'); }}
-                onDragLeave={e => e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-50')}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-blue-400'); }}
+                onDragLeave={e => e.currentTarget.classList.remove('ring-2', 'ring-blue-400')}
                 onDrop={e => handleDrop(w.id, e)}
-                className={`bg-slate-50 border rounded-lg px-3 py-2 min-h-[64px] transition cursor-pointer ${
-                  isSelected ? 'border-blue-500 ring-1 ring-blue-300 bg-blue-50/40' : 'border-slate-200 hover:border-slate-300'
+                className={`bg-white border rounded-lg overflow-hidden transition cursor-pointer ${
+                  isSelected ? 'border-blue-500 ring-1 ring-blue-300' : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="flex justify-between items-baseline">
-                  <span className="text-xs font-semibold">{w.klant}</span>
-                  <span className="text-[10px] text-slate-400">{w.address}</span>
+                {/* Werf header — klant + werf-naam + werf-opmerking */}
+                <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs font-semibold text-slate-900">{w.klant}</span>
+                    <span className="text-[10px] text-slate-500">{w.omschrijving || w.address}</span>
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider shrink-0">Opmerking werf:</span>
+                    <input
+                      type="text"
+                      value={w.werfNota || ''}
+                      onChange={e => { e.stopPropagation(); onUpdateWerf && onUpdateWerf(w.id, { werfNota: e.target.value }); }}
+                      onClick={e => e.stopPropagation()}
+                      placeholder="bv. toegang via Westkant, contactpersoon Jan +32 470..."
+                      className="flex-1 text-[10px] bg-transparent border-0 outline-none focus:bg-white focus:px-1 focus:rounded text-slate-700 placeholder-slate-300"
+                    />
+                  </div>
                 </div>
-                <div className="mt-1 min-h-[24px]">
-                  {w.assignments.length === 0 ? (
-                    <span className="text-[10px] text-slate-400">Sleep hier...</span>
-                  ) : (
-                    w.assignments.map(a => {
-                      const isHemzelf = a.workerId === 'HEMZELF';
-                      const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
-                      const mc = machines.find(x => x.id === a.machineId);
-                      const half = a.half || 'full';
-                      const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : null;
-                      const halfBadgeColor = half === 'am' ? 'bg-blue-100 text-blue-800' : half === 'pm' ? 'bg-amber-100 text-amber-800' : '';
-                      const canSplit = (wk || isHemzelf) && half === 'full';
-                      const isDup = a.instanceKey && a.instanceKey !== 'main';
 
-                      return (
-                        <span
-                          key={a.id}
-                          className={`inline-flex items-center gap-1 bg-white border ${
-                            isHemzelf ? 'border-slate-400 bg-slate-50' :
-                            half === 'pm' ? 'border-amber-300' :
-                            isDup ? 'border-purple-300' :
-                            'border-slate-200'
-                          } rounded-full px-2 py-0.5 text-[10px] mr-1 mt-1`}
-                        >
-                          {halfLabel && (
-                            <span className={`text-[8px] font-semibold px-1 rounded ${halfBadgeColor}`}>{halfLabel}</span>
-                          )}
-                          {isDup && (
-                            <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800" title="Dubbele werknemer instantie">×2</span>
-                          )}
-                          {isHemzelf && (
-                            <span className="text-slate-700 italic" title="Naakte machineverhuur — klant bestuurt zelf">HEMZELF</span>
-                          )}
-                          {wk && (
-                            <span className={half === 'pm' ? 'lowercase' : ''}>
-                              {renderName(wk.name, half)}
-                            </span>
-                          )}
-                          {(wk || isHemzelf) && mc && ' · '}
-                          {mc && mc.code}
-                          {isHemzelf && (
-                            <span className="text-slate-400 ml-1 text-[9px]" title="OA-tarief = € 0">€0 OA</span>
-                          )}
-                          {a.hours && a.hours !== 8 && (
-                            <span className="text-slate-400 ml-1">{a.hours}u</span>
-                          )}
-                          {canSplit && !isHemzelf && (
-                            <button
-                              onClick={() => setSplitDialog({
-                                sourceWerfId: w.id,
-                                sourceAssignmentId: a.id,
-                                workerName: wk.name,
-                                workerId: a.workerId,
-                                machineId: a.machineId
-                              })}
-                              className="text-blue-500 hover:text-blue-700 ml-0.5"
-                              title="Dubbele werknemer maken (AM/PM splitsen)"
+                {/* Toewijzingen tabel */}
+                {w.assignments.length === 0 ? (
+                  <div className="px-3 py-3 text-center text-[10px] text-slate-400 italic">
+                    Sleep een werknemer + machine hier...
+                  </div>
+                ) : (
+                  <table className="w-full text-[10px]" onClick={e => e.stopPropagation()}>
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100 text-[8.5px] uppercase tracking-wider text-slate-400">
+                        <th className="text-left px-2 py-1 font-medium w-[26%]">Werknemer</th>
+                        <th className="text-left px-2 py-1 font-medium w-[22%]">Machine</th>
+                        <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 1</th>
+                        <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 2</th>
+                        <th className="text-left px-2 py-1 font-medium w-[20%]">Opmerking</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {w.assignments.map(a => {
+                        const isHemzelf = a.workerId === 'HEMZELF';
+                        const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
+                        const mc = machines.find(x => x.id === a.machineId);
+                        const ex1 = a.extra1Id ? artikelen.find(x => x.id === a.extra1Id) : null;
+                        const ex2 = a.extra2Id ? artikelen.find(x => x.id === a.extra2Id) : null;
+                        const half = a.half || 'full';
+                        const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : null;
+                        const canSplit = (wk || isHemzelf) && half === 'full';
+                        const isDup = a.instanceKey && a.instanceKey !== 'main';
+
+                        return (
+                          <tr key={a.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 group">
+                            {/* Werknemer */}
+                            <td className="px-2 py-1.5 align-top">
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {halfLabel && (
+                                  <span className={`text-[8px] font-semibold px-1 rounded ${half === 'am' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{halfLabel}</span>
+                                )}
+                                {isDup && (
+                                  <span className="text-[8px] font-semibold px-1 rounded bg-purple-100 text-purple-800" title="Dubbele werknemer instantie">×2</span>
+                                )}
+                                {isHemzelf && (
+                                  <span className="text-slate-700 italic" title="Naakte machineverhuur — klant bestuurt zelf">HEMZELF</span>
+                                )}
+                                {wk && (
+                                  <span className={`text-slate-900 ${half === 'pm' ? 'lowercase' : ''}`}>
+                                    {renderName(wk.name, half)}
+                                  </span>
+                                )}
+                                {canSplit && !isHemzelf && (
+                                  <button
+                                    onClick={() => setSplitDialog({
+                                      sourceWerfId: w.id,
+                                      sourceAssignmentId: a.id,
+                                      workerName: wk.name,
+                                      workerId: a.workerId,
+                                      machineId: a.machineId
+                                    })}
+                                    className="text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition"
+                                    title="VM/NM splitsen"
+                                  >
+                                    ⊕
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Machine */}
+                            <td className="px-2 py-1.5 align-top">
+                              {mc ? (
+                                <span className="inline-flex items-center gap-1">
+                                  {mc.color && (
+                                    <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: mc.color }} />
+                                  )}
+                                  <span className="text-slate-900">{mc.code}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )}
+                            </td>
+
+                            {/* Extra 1 — drop zone */}
+                            <td
+                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex1 ? '' : 'bg-slate-50/30'}`}
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
+                              onDrop={e => {
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
+                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra1' });
+                              }}
                             >
-                              ⊕
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              const current = a.opmerking || '';
-                              const next = window.prompt('Opmerking (bv. GPS, palletvorken, locatie binnen werf):', current);
-                              if (next !== null) onUpdateAssignment(a.id, { opmerking: next.trim() });
-                            }}
-                            className={`ml-0.5 ${a.opmerking ? 'text-blue-600' : 'text-slate-400 hover:text-blue-600'}`}
-                            title={a.opmerking ? `Opmerking: ${a.opmerking}` : 'Opmerking toevoegen'}
-                          >
-                            💬
-                          </button>
-                          {a.opmerking && (
-                            <span className="ml-1 text-[9px] text-slate-600 italic">{a.opmerking}</span>
-                          )}
-                          <button
-                            onClick={() => onRemove(a.id)}
-                            className="text-slate-400 hover:text-red-500 ml-1"
-                            title="Verwijderen"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
+                              {ex1 ? (
+                                <span className="inline-flex items-center gap-1 group/cell">
+                                  <span className="text-amber-700 font-medium">{ex1.code}</span>
+                                  <button
+                                    onClick={() => onUpdateAssignment(a.id, { extra1Id: null })}
+                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover/cell:opacity-100"
+                                    title="Verwijderen"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 italic text-[9px]">+ artikel</span>
+                              )}
+                            </td>
+
+                            {/* Extra 2 — drop zone */}
+                            <td
+                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex2 ? '' : 'bg-slate-50/30'}`}
+                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
+                              onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
+                              onDrop={e => {
+                                e.stopPropagation();
+                                e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
+                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra2' });
+                              }}
+                            >
+                              {ex2 ? (
+                                <span className="inline-flex items-center gap-1 group/cell">
+                                  <span className="text-amber-700 font-medium">{ex2.code}</span>
+                                  <button
+                                    onClick={() => onUpdateAssignment(a.id, { extra2Id: null })}
+                                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover/cell:opacity-100"
+                                    title="Verwijderen"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 italic text-[9px]">+ artikel</span>
+                              )}
+                            </td>
+
+                            {/* Opmerking */}
+                            <td className="px-2 py-1.5 align-top border-l border-slate-100 relative">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={a.opmerking || ''}
+                                  onChange={e => onUpdateAssignment(a.id, { opmerking: e.target.value })}
+                                  placeholder="—"
+                                  className="flex-1 text-[10px] bg-transparent border-0 outline-none focus:bg-white focus:px-1 focus:rounded text-slate-700 placeholder-slate-300 min-w-0"
+                                />
+                                <button
+                                  onClick={() => onRemove(a.id)}
+                                  className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition shrink-0"
+                                  title="Rij verwijderen"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
               );
             })}
@@ -322,9 +430,10 @@ export default function PlanningTab({
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Resources</div>
 
-          <div className="bg-blue-900 rounded-lg p-2 mb-2">
+          <div className="grid grid-cols-2 gap-2">
+          <div className="bg-blue-900 rounded-lg p-2">
             <div className="text-[10px] font-semibold text-blue-200 mb-2">WERKNEMERS</div>
-            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto thin-scroll">
+            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
               {workerInstances.filter(w => dailyPool.workers.has(w.id)).map(w => {
                 const status = workerStatus(w.id, w.instanceKey);
                 const draggable = status !== 'booked';
@@ -410,7 +519,7 @@ export default function PlanningTab({
 
           <div className="bg-red-900 rounded-lg p-2">
             <div className="text-[10px] font-semibold text-red-200 mb-2">MACHINES</div>
-            <div className="flex flex-col gap-1 max-h-44 overflow-y-auto thin-scroll">
+            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
               {machines.filter(m => dailyPool.machines.has(m.id)).map(m => {
                 const taken = isMachineAssigned(m.id);
                 const isSelected = selectedMachineId === m.id;
@@ -469,6 +578,80 @@ export default function PlanningTab({
                   onCancel={() => setAddMachinePopover(false)}
                   onCreateNew={() => { setAddMachinePopover(false); setCreateMachineDialog(true); }}
                   createNewLabel="+ Nieuwe machine aanmaken"
+                />
+              )}
+            </div>
+          </div>
+          </div>{/* /grid-cols-2 (werknemers + machines side by side) */}
+
+          {/* Artikelen pool — onder de werknemers/machines pools */}
+          <div className="bg-amber-900 rounded-lg p-2 mt-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] font-semibold text-amber-200">ARTIKELEN</div>
+              <div className="text-[9px] text-amber-300/70">GPS · trilplaten · buizen · ...</div>
+            </div>
+            <div className="grid grid-cols-2 gap-1 max-h-44 overflow-y-auto thin-scroll">
+              {artikelen.filter(a => dailyPool.artikelen && dailyPool.artikelen.has(a.id)).map(a => {
+                const isSelected = selectedArtikelId === a.id;
+                return (
+                  <div
+                    key={a.id}
+                    draggable
+                    onDragStart={e => e.dataTransfer.setData('text/plain', `artikel:${a.id}:`)}
+                    onClick={() => setSelectedArtikelId(isSelected ? null : a.id)}
+                    className={`rounded px-2 py-1 text-[11px] flex justify-between gap-2 cursor-grab hover:bg-white ${
+                      isSelected ? 'bg-orange-200 text-orange-900 ring-2 ring-orange-400' : 'bg-white/95 text-slate-900'
+                    }`}
+                    title={a.description}
+                  >
+                    <span className="text-slate-500 text-[9px] truncate">{a.group}</span>
+                    <span className="font-medium truncate">{a.code}</span>
+                  </div>
+                );
+              })}
+              {(!dailyPool.artikelen || dailyPool.artikelen.size === 0) && (
+                <div className="col-span-2 text-center text-[10px] text-amber-300/70 italic py-2">
+                  Geen artikelen in dagplanning — klik + om toe te voegen
+                </div>
+              )}
+            </div>
+            {/* +/− toolbar — artikelen in/uit dagplanning */}
+            <div className="flex gap-1.5 mt-2 items-center relative">
+              <button
+                onClick={() => setAddArtikelPopover(true)}
+                className="w-8 h-8 rounded bg-amber-800 hover:bg-amber-700 text-amber-100 text-base font-semibold flex items-center justify-center border border-amber-700 leading-none"
+                title="Artikelen aan dagplanning toevoegen"
+              >
+                +
+              </button>
+              <button
+                onClick={() => {
+                  if (!selectedArtikelId) return;
+                  onRemoveFromPool('artikelen', selectedArtikelId);
+                  setSelectedArtikelId(null);
+                }}
+                disabled={!selectedArtikelId}
+                className="w-8 h-8 rounded bg-amber-800 hover:bg-amber-700 text-amber-100 text-base font-semibold flex items-center justify-center border border-amber-700 disabled:opacity-30 disabled:cursor-not-allowed leading-none"
+                title={selectedArtikelId ? 'Geselecteerd artikel uit dagplanning halen' : 'Selecteer eerst een artikel'}
+              >
+                −
+              </button>
+              {selectedArtikelId && (
+                <span className="text-[9px] text-amber-200 italic">
+                  klik − om uit dagplanning te halen
+                </span>
+              )}
+              {addArtikelPopover && (
+                <MultiSelectPopover
+                  title="Artikelen aan dagplanning toevoegen"
+                  items={artikelen.filter(a => a.active !== false).map(a => ({
+                    id: a.id,
+                    label: a.code,
+                    sublabel: `${a.name} · ${a.group}`
+                  }))}
+                  selectedIds={dailyPool.artikelen || new Set()}
+                  onConfirm={(ids) => { onAddToPool('artikelen', ids); setAddArtikelPopover(false); }}
+                  onCancel={() => setAddArtikelPopover(false)}
                 />
               )}
             </div>

@@ -159,14 +159,14 @@ export function TextInput({ value, onChange, type = 'text', placeholder = '', st
   );
 }
 
-export function Select({ value, onChange, options }) {
+export function Select({ value, onChange, options, renderOption }) {
   return (
     <select
       value={value || ''}
       onChange={e => onChange(e.target.value)}
       className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
     >
-      {options.map(o => <option key={o} value={o}>{o}</option>)}
+      {options.map(o => <option key={o} value={o}>{renderOption ? renderOption(o) : o}</option>)}
     </select>
   );
 }
