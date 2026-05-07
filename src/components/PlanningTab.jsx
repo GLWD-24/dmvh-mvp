@@ -90,17 +90,32 @@ export default function PlanningTab({
 
   const isMachineAssigned = (id) => werven.some(w => w.assignments.some(a => a.machineId === id));
 
+  // Helper: normalize extras to array (backward-compat: leest oude extra1Id/extra2Id velden ook)
+  const getExtraIds = (a) => {
+    if (Array.isArray(a.extraIds)) return a.extraIds;
+    const arr = [];
+    if (a.extra1Id) arr.push(a.extra1Id);
+    if (a.extra2Id) arr.push(a.extra2Id);
+    return arr;
+  };
+
   const handleDrop = (werfId, e, target) => {
     e.preventDefault();
     e.currentTarget.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-50');
     const data = e.dataTransfer.getData('text/plain');
     if (!data) return;
     const [kind, id, instanceKey] = data.split(':');
-    // If target specifies a row + slot (extra1/extra2/machine/worker), handle differently
+    // If target specifies a row + slot, handle differently
     if (target && target.assignmentId && target.slot) {
-      if (target.slot === 'extra1' || target.slot === 'extra2') {
+      if (target.slot === 'extras') {
         if (kind === 'artikel') {
-          onUpdateAssignment(target.assignmentId, { [target.slot + 'Id']: id });
+          // Voeg artikel toe aan extras-array (geen duplicates)
+          const assignment = werven.flatMap(w => w.assignments).find(x => x.id === target.assignmentId);
+          if (!assignment) return;
+          const current = getExtraIds(assignment);
+          if (current.includes(id)) return; // al aanwezig
+          const next = [...current, id];
+          onUpdateAssignment(target.assignmentId, { extraIds: next, extra1Id: null, extra2Id: null });
         }
         return;
       }
@@ -119,15 +134,20 @@ export default function PlanningTab({
 
   // Dubbelklik op een cel → item terug naar pool (clear veld op assignment).
   // Als hierdoor zowel werknemer als machine leeg zijn én geen extras, dan rij verwijderen.
-  const handleClearCell = (assignment, slot) => {
+  const handleClearCell = (assignment, slot, extraId = null) => {
     const patch = {};
     if (slot === 'worker') patch.workerId = null;
     if (slot === 'machine') patch.machineId = null;
-    if (slot === 'extra1') patch.extra1Id = null;
-    if (slot === 'extra2') patch.extra2Id = null;
+    if (slot === 'extra' && extraId) {
+      const current = getExtraIds(assignment);
+      patch.extraIds = current.filter(x => x !== extraId);
+      patch.extra1Id = null;
+      patch.extra2Id = null;
+    }
 
     const after = { ...assignment, ...patch };
-    const isEmpty = !after.workerId && !after.machineId && !after.extra1Id && !after.extra2Id;
+    const remainingExtras = patch.extraIds !== undefined ? patch.extraIds : getExtraIds(after);
+    const isEmpty = !after.workerId && !after.machineId && remainingExtras.length === 0;
     if (isEmpty) {
       onRemove(assignment.id);
     } else {
@@ -216,7 +236,7 @@ export default function PlanningTab({
         )}
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Werven</div>
           <div className="flex flex-col gap-2">
@@ -253,20 +273,19 @@ export default function PlanningTab({
                 </div>
 
                 {/* Toewijzingen tabel — header altijd zichtbaar, ook bij lege werf */}
-                <table className="w-full text-[10px]" onClick={e => e.stopPropagation()}>
+                <table className="w-full text-[12px]" onClick={e => e.stopPropagation()}>
                   <thead>
-                    <tr className="bg-slate-50/50 border-b border-slate-100 text-[8.5px] uppercase tracking-wider text-slate-400">
-                      <th className="text-left px-2 py-1 font-medium w-[26%]">Werknemer</th>
-                      <th className="text-left px-2 py-1 font-medium w-[22%]">Machine</th>
-                      <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 1</th>
-                      <th className="text-left px-2 py-1 font-medium w-[16%]">Extra 2</th>
-                      <th className="text-left px-2 py-1 font-medium w-[20%]">Opmerking</th>
+                    <tr className="bg-slate-50/50 border-b border-slate-100 text-[9.5px] uppercase tracking-wider text-slate-400">
+                      <th className="text-left px-2 py-1 font-medium w-[24%]">Werknemer</th>
+                      <th className="text-left px-2 py-1 font-medium w-[20%]">Machine</th>
+                      <th className="text-left px-2 py-1 font-medium w-[34%]">Artikelen</th>
+                      <th className="text-left px-2 py-1 font-medium w-[22%]">Opmerking</th>
                     </tr>
                   </thead>
                   <tbody>
                     {w.assignments.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-3 text-center text-[10px] text-slate-400 italic">
+                        <td colSpan={4} className="px-3 py-3 text-center text-[11px] text-slate-400 italic">
                           Sleep een werknemer + machine hier...
                         </td>
                       </tr>
@@ -275,15 +294,16 @@ export default function PlanningTab({
                         const isHemzelf = a.workerId === 'HEMZELF';
                         const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
                         const mc = machines.find(x => x.id === a.machineId);
-                        const ex1 = a.extra1Id ? artikelen.find(x => x.id === a.extra1Id) : null;
-                        const ex2 = a.extra2Id ? artikelen.find(x => x.id === a.extra2Id) : null;
+                        const extraIds = getExtraIds(a);
+                        const extras = extraIds.map(eid => artikelen.find(x => x.id === eid)).filter(Boolean);
                         const half = a.half || 'full';
                         const halfLabel = half === 'am' ? 'VM' : half === 'pm' ? 'NM' : null;
                         const canSplit = (wk || isHemzelf) && half === 'full';
                         const isDup = a.instanceKey && a.instanceKey !== 'main';
-                        // OPHALEN: machine staat bij klant zonder werknemer en zonder HEMZELF.
+                        // OPHALEN: machine of artikel staat bij klant zonder werknemer/HEMZELF.
                         // Auto-afgeleid — geen handmatige toggle nodig.
-                        const isOphalen = !!mc && !wk && !isHemzelf;
+                        const hasMaterial = !!mc || extras.length > 0;
+                        const isOphalen = hasMaterial && !wk && !isHemzelf;
 
                         return (
                           <tr key={a.id} className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/50 group">
@@ -358,43 +378,33 @@ export default function PlanningTab({
                               )}
                             </td>
 
-                            {/* Extra 1 — drop zone + dubbelklik om te verwijderen */}
+                            {/* Artikelen — drop zone voor meerdere artikelen, chips per item */}
                             <td
-                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex1 ? 'cursor-pointer hover:bg-amber-50' : 'bg-slate-50/30'}`}
-                              onDoubleClick={() => { if (ex1) handleClearCell(a, 'extra1'); }}
+                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${extras.length > 0 ? '' : 'bg-slate-50/30'}`}
                               onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
                               onDrop={e => {
                                 e.stopPropagation();
                                 e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
-                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra1' });
+                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'extras' });
                               }}
-                              title={ex1 ? `${ex1.name} — dubbelklik om te verwijderen` : 'Sleep een artikel hier'}
+                              title="Sleep artikelen hier (meerdere mogelijk)"
                             >
-                              {ex1 ? (
-                                <span className="text-amber-700 font-medium">{ex1.code}</span>
+                              {extras.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {extras.map(art => (
+                                    <span
+                                      key={art.id}
+                                      onDoubleClick={(ev) => { ev.stopPropagation(); handleClearCell(a, 'extra', art.id); }}
+                                      className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-medium cursor-pointer hover:bg-amber-100 hover:border-amber-300"
+                                      title={`${art.name} — dubbelklik om te verwijderen`}
+                                    >
+                                      {art.code}
+                                    </span>
+                                  ))}
+                                </div>
                               ) : (
-                                <span className="text-slate-300 italic text-[9px]">+ artikel</span>
-                              )}
-                            </td>
-
-                            {/* Extra 2 — drop zone + dubbelklik om te verwijderen */}
-                            <td
-                              className={`px-2 py-1.5 align-top border-l border-slate-100 ${ex2 ? 'cursor-pointer hover:bg-amber-50' : 'bg-slate-50/30'}`}
-                              onDoubleClick={() => { if (ex2) handleClearCell(a, 'extra2'); }}
-                              onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
-                              onDragLeave={e => { e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400'); }}
-                              onDrop={e => {
-                                e.stopPropagation();
-                                e.currentTarget.classList.remove('bg-amber-100', 'ring-1', 'ring-amber-400');
-                                handleDrop(w.id, e, { assignmentId: a.id, slot: 'extra2' });
-                              }}
-                              title={ex2 ? `${ex2.name} — dubbelklik om te verwijderen` : 'Sleep een artikel hier'}
-                            >
-                              {ex2 ? (
-                                <span className="text-amber-700 font-medium">{ex2.code}</span>
-                              ) : (
-                                <span className="text-slate-300 italic text-[9px]">+ artikel</span>
+                                <span className="text-slate-300 italic text-[10px]">+ artikel</span>
                               )}
                             </td>
 
@@ -474,12 +484,12 @@ export default function PlanningTab({
         </div>
 
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Resources</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Resources</div>
 
           <div className="grid grid-cols-2 gap-2">
-          <div className="bg-blue-900 rounded-lg p-2">
-            <div className="text-[10px] font-semibold text-blue-200 mb-2">WERKNEMERS</div>
-            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
+          <div className="bg-blue-900 rounded-lg p-3">
+            <div className="text-[11px] font-semibold text-blue-200 mb-2">WERKNEMERS</div>
+            <div className="flex flex-col gap-1.5 max-h-[28rem] overflow-y-auto thin-scroll">
               {workerInstances
                 .filter(w => dailyPool.workers.has(w.id))
                 .filter(w => workerStatus(w.id, w.instanceKey) !== 'booked')
@@ -495,22 +505,22 @@ export default function PlanningTab({
                     draggable={draggable}
                     onDragStart={e => e.dataTransfer.setData('text/plain', `worker:${w.id}:${w.instanceKey}`)}
                     onClick={() => !w.isDuplicate && setSelectedWorkerId(isSelected ? null : w.id)}
-                    className={`rounded px-2 py-1 text-[11px] flex items-center gap-1 ${
+                    className={`rounded px-2.5 py-1.5 text-[13px] flex items-center gap-1 ${
                       isSelected ? 'bg-blue-200 text-blue-900 ring-2 ring-blue-400' : 'bg-white/95 text-slate-900'
                     } ${opacity} ${draggable ? 'cursor-grab hover:bg-white' : 'cursor-not-allowed'}`}
                     title={status === 'am-only' ? 'NM nog vrij — sleep om PM toe te wijzen' : ''}
                   >
                     <span className={`flex-1 truncate ${w.isDuplicate ? 'lowercase' : ''}`} title={w.isDuplicate ? 'Dubbele werknemer instantie' : ''}>
                       {w.name}
-                      {labelSuffix && <span className="text-slate-500 text-[9px] ml-1">{labelSuffix}</span>}
+                      {labelSuffix && <span className="text-slate-500 text-[10px] ml-1">{labelSuffix}</span>}
                     </span>
                     {w.type === 'subcontractor' && (
-                      <span className="text-[9px] text-amber-700 bg-amber-100 px-1 rounded">OA</span>
+                      <span className="text-[10px] text-amber-700 bg-amber-100 px-1 rounded">OA</span>
                     )}
                     {!w.isDuplicate && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onDuplicate(w.id); }}
-                        className="text-purple-600 hover:text-purple-800 text-[12px] leading-none"
+                        className="text-purple-600 hover:text-purple-800 text-[14px] leading-none"
                         title="Dubbele werknemer aanmaken — werknemer verschijnt nog een keer in de pool"
                       >
                         ⧉
@@ -565,9 +575,9 @@ export default function PlanningTab({
             </div>
           </div>
 
-          <div className="bg-red-900 rounded-lg p-2">
-            <div className="text-[10px] font-semibold text-red-200 mb-2">MACHINES</div>
-            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto thin-scroll">
+          <div className="bg-red-900 rounded-lg p-3">
+            <div className="text-[11px] font-semibold text-red-200 mb-2">MACHINES</div>
+            <div className="flex flex-col gap-1.5 max-h-[28rem] overflow-y-auto thin-scroll">
               {machines
                 .filter(m => dailyPool.machines.has(m.id))
                 .filter(m => !isMachineAssigned(m.id))
@@ -580,11 +590,11 @@ export default function PlanningTab({
                     draggable={!taken}
                     onDragStart={e => e.dataTransfer.setData('text/plain', `machine:${m.id}:`)}
                     onClick={() => setSelectedMachineId(isSelected ? null : m.id)}
-                    className={`rounded px-2 py-1 text-[11px] flex justify-between gap-2 ${
+                    className={`rounded px-2.5 py-1.5 text-[13px] flex justify-between gap-2 ${
                       isSelected ? 'bg-amber-200 text-amber-900 ring-2 ring-amber-400' : 'bg-white/95 text-slate-900'
                     } ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-grab hover:bg-white'}`}
                   >
-                    <span className="text-slate-500 text-[10px]">{m.group}</span>
+                    <span className="text-slate-500 text-[11px]">{m.group}</span>
                     <span className="font-medium">{m.code}</span>
                   </div>
                 );
@@ -636,12 +646,12 @@ export default function PlanningTab({
           </div>{/* /grid-cols-2 (werknemers + machines side by side) */}
 
           {/* Artikelen pool — onder de werknemers/machines pools */}
-          <div className="bg-amber-900 rounded-lg p-2 mt-2">
+          <div className="bg-amber-900 rounded-lg p-3 mt-2">
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] font-semibold text-amber-200">ARTIKELEN</div>
-              <div className="text-[9px] text-amber-300/70">GPS · trilplaten · buizen · ...</div>
+              <div className="text-[11px] font-semibold text-amber-200">ARTIKELEN</div>
+              <div className="text-[10px] text-amber-300/70">GPS · trilplaten · buizen · ...</div>
             </div>
-            <div className="grid grid-cols-2 gap-1 max-h-44 overflow-y-auto thin-scroll">
+            <div className="grid grid-cols-2 gap-1.5 max-h-72 overflow-y-auto thin-scroll">
               {artikelen.filter(a => dailyPool.artikelen && dailyPool.artikelen.has(a.id)).map(a => {
                 const isSelected = selectedArtikelId === a.id;
                 return (
@@ -650,12 +660,12 @@ export default function PlanningTab({
                     draggable
                     onDragStart={e => e.dataTransfer.setData('text/plain', `artikel:${a.id}:`)}
                     onClick={() => setSelectedArtikelId(isSelected ? null : a.id)}
-                    className={`rounded px-2 py-1 text-[11px] flex justify-between gap-2 cursor-grab hover:bg-white ${
+                    className={`rounded px-2.5 py-1.5 text-[13px] flex justify-between gap-2 cursor-grab hover:bg-white ${
                       isSelected ? 'bg-orange-200 text-orange-900 ring-2 ring-orange-400' : 'bg-white/95 text-slate-900'
                     }`}
                     title={a.description}
                   >
-                    <span className="text-slate-500 text-[9px] truncate">{a.group}</span>
+                    <span className="text-slate-500 text-[10px] truncate">{a.group}</span>
                     <span className="font-medium truncate">{a.code}</span>
                   </div>
                 );
@@ -1266,13 +1276,14 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
   })();
   const printedOn = formatDate(new Date());
 
-  // Helper: render assignment in row format (werknemer | machine | extra1 | extra2 | opmerking)
+  // Helper: render assignment in row format (werknemer | machine | artikelen | opmerking)
   const renderAssignment = (a) => {
     const isHemzelf = a.workerId === 'HEMZELF';
     const wk = isHemzelf ? null : workers.find(x => x.id === a.workerId);
     const mc = machines.find(x => x.id === a.machineId);
-    const ex1 = a.extra1Id ? artikelen.find(x => x.id === a.extra1Id) : null;
-    const ex2 = a.extra2Id ? artikelen.find(x => x.id === a.extra2Id) : null;
+    // Backward-compat: lees zowel extraIds-array als oude extra1Id/extra2Id velden
+    const extraIds = Array.isArray(a.extraIds) ? a.extraIds : [a.extra1Id, a.extra2Id].filter(Boolean);
+    const extras = extraIds.map(eid => artikelen.find(x => x.id === eid)).filter(Boolean);
     const half = a.half || 'full';
     const isDup = a.instanceKey && a.instanceKey !== 'main';
     const lowercaseName = half === 'pm' || isDup;
@@ -1284,11 +1295,10 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
           : '',
       machine: mc?.code || '',
       machineColor: mc?.color || '#3B82F6',
-      extra1: ex1?.code || '',
-      extra2: ex2?.code || '',
+      artikelen: extras.map(x => x.code).join(' · '),
       opmerking: a.opmerking || '',
-      // OPHALEN automatisch afgeleid: machine zonder werknemer en zonder HEMZELF
-      tePhalen: !!mc && !wk && !isHemzelf,
+      // OPHALEN automatisch afgeleid: machine of artikel zonder werknemer en zonder HEMZELF
+      tePhalen: (!!mc || extras.length > 0) && !wk && !isHemzelf,
       isDup
     };
   };
@@ -1319,7 +1329,7 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
         }
         .useit-row {
           display: grid;
-          grid-template-columns: 24px 1.4fr 1.2fr 0.7fr 0.7fr 1.2fr;
+          grid-template-columns: 24px 1.4fr 1.2fr 1.6fr 1.2fr;
           font-size: 11px;
           line-height: 1.4;
           padding: 1px 0;
@@ -1344,8 +1354,7 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
           <div className="indent" />
           <div>Werknemer</div>
           <div>Machine</div>
-          <div>Extra 1</div>
-          <div>Extra 2</div>
+          <div>Artikelen</div>
           <div>Opmerking</div>
         </div>
 
@@ -1377,8 +1386,7 @@ function PrintView({ date, werven, workers, machines, artikelen = [] }) {
                             {r.worker}
                           </div>
                           <div className={`useit-machine ${r.machineColor !== '#3B82F6' ? 'colored' : ''}`}>{r.machine}</div>
-                          <div className="useit-artikel">{r.extra1}</div>
-                          <div className="useit-artikel">{r.extra2}</div>
+                          <div className="useit-artikel">{r.artikelen}</div>
                           <div className="text-slate-700">
                             {r.tePhalen && <span style={{ color: '#9a3412', fontWeight: 700, fontSize: '9px', marginRight: '4px', textTransform: 'uppercase' }}>Ophalen</span>}
                             {r.opmerking}

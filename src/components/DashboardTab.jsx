@@ -38,7 +38,7 @@ function SectionCard({ title, action, children }) {
   );
 }
 
-export default function DashboardTab({ klanten, werven, workers, machines, werkbonnen, proposals, onNavigate }) {
+export default function DashboardTab({ klanten, werven, workers, machines, artikelen = [], werkbonnen, proposals, onNavigate }) {
   // Compute KPIs
   const today = '07/05/2026';
   const dailyOpen = werven.filter(w => w.status !== 'closed').length;
@@ -49,23 +49,27 @@ export default function DashboardTab({ klanten, werven, workers, machines, werkb
   const activeWorkers = workers.filter(w => !w.uitDienst).length;
   const activeMachines = machines.filter(m => m.active !== false).length;
 
-  // "Te ophalen" — machines die bij een klant achtergelaten zijn en moeten opgehaald worden.
-  // Auto-afgeleid: een assignment heeft een machine maar geen werknemer en geen HEMZELF.
+  // "Te ophalen" — machine of materiaal die bij een klant achtergelaten is.
+  // Auto-afgeleid: een assignment met machine of artikel maar zonder werknemer en zonder HEMZELF.
   const teOphalen = [];
   werven.forEach(w => {
     (w.assignments || []).forEach(a => {
       const isHemzelf = a.workerId === 'HEMZELF';
       const hasWorker = a.workerId && !isHemzelf;
-      const hasMachine = !!a.machineId;
-      if (hasMachine && !hasWorker && !isHemzelf) {
-        const mc = machines.find(x => x.id === a.machineId);
+      const mc = a.machineId ? machines.find(x => x.id === a.machineId) : null;
+      // Backward-compat: zowel extraIds-array als oude extra1Id/extra2Id velden
+      const extraIds = Array.isArray(a.extraIds) ? a.extraIds : [a.extra1Id, a.extra2Id].filter(Boolean);
+      const extras = extraIds.map(eid => artikelen.find(x => x.id === eid)).filter(Boolean);
+      const hasMaterial = !!mc || extras.length > 0;
+      if (hasMaterial && !hasWorker && !isHemzelf) {
         teOphalen.push({
           assignmentId: a.id,
           werfId: w.id,
           klant: w.klant || '—',
           omschrijving: w.omschrijving || '',
-          machineCode: mc?.code || '—',
+          machineCode: mc?.code || '',
           machineGroup: mc?.group || '',
+          extraCodes: extras.map(x => x.code),
           opmerking: a.opmerking || ''
         });
       }
@@ -229,23 +233,43 @@ export default function DashboardTab({ klanten, werven, workers, machines, werkb
             </button>
           </div>
           <ul className="divide-y divide-orange-100">
-            {teOphalen.map(item => (
-              <li key={item.assignmentId} className="px-4 py-2.5 flex items-center justify-between text-[12px] hover:bg-orange-50">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-slate-900 truncate">
-                    {item.klant} {item.omschrijving && <span className="text-slate-500">— {item.omschrijving}</span>}
+            {teOphalen.map(item => {
+              // Bouw de materiaal-omschrijving: machine + alle extras gescheiden door ·
+              const materialParts = [];
+              if (item.machineCode) {
+                materialParts.push(
+                  <span key="m" className="font-medium text-orange-800">
+                    {item.machineCode}
+                    {item.machineGroup && <span className="text-slate-500 font-normal"> ({item.machineGroup})</span>}
+                  </span>
+                );
+              }
+              item.extraCodes.forEach((code, i) => {
+                materialParts.push(<span key={`e${i}`} className="font-medium text-orange-800">{code}</span>);
+              });
+
+              return (
+                <li key={item.assignmentId} className="px-4 py-2.5 flex items-center justify-between text-[12px] hover:bg-orange-50">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-slate-900 truncate">
+                      {item.klant} {item.omschrijving && <span className="text-slate-500">— {item.omschrijving}</span>}
+                    </div>
+                    <div className="text-slate-600 text-[11px] flex items-center flex-wrap gap-x-1.5">
+                      {materialParts.map((part, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <span className="text-slate-300">·</span>}
+                          {part}
+                        </React.Fragment>
+                      ))}
+                      {item.opmerking && <><span className="text-slate-300">·</span><span className="text-slate-500 italic">{item.opmerking}</span></>}
+                    </div>
                   </div>
-                  <div className="text-slate-600 text-[11px]">
-                    <span className="font-medium text-orange-800">{item.machineCode}</span>
-                    {item.machineGroup && <span className="text-slate-500"> · {item.machineGroup}</span>}
-                    {item.opmerking && <span className="text-slate-500"> · {item.opmerking}</span>}
-                  </div>
-                </div>
-                <span className="shrink-0 ml-3 text-[10px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium uppercase">
-                  Niet factureren
-                </span>
-              </li>
-            ))}
+                  <span className="shrink-0 ml-3 text-[10px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded font-medium uppercase">
+                    Niet factureren
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
