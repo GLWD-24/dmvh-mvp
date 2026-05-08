@@ -655,6 +655,33 @@ export default function App() {
     setStatus({ text: 'Voorstel klaar — verzend naar klant', kind: 'info' });
   };
 
+  // Manueel voorstel — voor reparaties, verkoop, vergoedingen die niet uit werkbonnen komen.
+  // Geen koppeling met werkbonnen (lineIds blijft leeg) — daardoor blokkeren deze regels
+  // ook geen werkbonnen voor toekomstige voorstellen.
+  const proposalCreateManual = ({ klant, period, lines, subtotal }) => {
+    const seq = proposals.length + 1;
+    const nr = `V2026-${String(421 + seq).padStart(4, '0')}`;
+    const newProposal = {
+      id: 'p-' + Date.now(),
+      nr,
+      klant,
+      period,
+      subtotal,
+      lines: lines.map(l => ({ ...l })),
+      lineIds: [],   // Manuele regels = geen werkbon-koppeling
+      status: 'draft',
+      createdDate: '04/05/2026',
+      poNr: null,
+      approveNote: null,
+      rejectReason: null,
+      rejectDate: null,
+      manual: true   // markeert dit als manueel ingegeven (audit + filter)
+    };
+    setProposals(prev => [newProposal, ...prev]);
+    showToast(`Manueel voorstel ${nr} aangemaakt`);
+    setStatus({ text: 'Manueel voorstel klaar', kind: 'info' });
+  };
+
   const proposalSend = (id) => {
     setProposals(prev => prev.map(p => p.id === id ? { ...p, status: 'sent' } : p));
     showToast('Voorstel verzonden naar klant');
@@ -1034,6 +1061,7 @@ export default function App() {
             werkbonnen={werkbonnen}
             proposals={proposals}
             onCreate={proposalCreate}
+            onCreateManual={proposalCreateManual}
             onSend={proposalSend}
             onSendBulk={proposalSendBulk}
             onUpdateLine={proposalUpdateLine}

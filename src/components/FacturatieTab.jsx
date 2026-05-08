@@ -27,17 +27,11 @@ const STATUS_STYLES = {
 const PHASE_OF = {
   draft: 'todo',
   rejected: 'todo',     // afgekeurd valt terug in 'te controleren'
-  approved: 'done',     // klant gaf groen licht / kantoor heeft goedgekeurd
+  approved: 'done',     // klant heeft goedgekeurd / kantoor heeft goedgekeurd
   sent: 'sent',
   invoiced: 'sent',
   paid: 'sent'
 };
-
-const TABS = [
-  { id: 'todo', label: 'Te controleren', icon: '📝' },
-  { id: 'done', label: 'Goedgekeurd', icon: '✓' },
-  { id: 'sent', label: 'Verzonden', icon: '📤' }
-];
 
 // dd/mm/yyyy → Date object voor vergelijking
 const parseDateNL = (s) => {
@@ -49,115 +43,123 @@ const parseDateNL = (s) => {
 // yyyy-mm-dd (HTML date input) → Date
 const parseDateISO = (s) => s ? new Date(s + 'T00:00:00') : null;
 
-export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onSend, onSendBulk, onUpdateLine, onApprove, onReject, onConvertToInvoice, onReopen }) {
+export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onCreateManual, onSend, onSendBulk, onUpdateLine, onApprove, onReject, onConvertToInvoice, onReopen }) {
   // ===== VIEW STATE =====
-  // 'list' = bulklijst-scherm (start), 'detail' = fiche van één voorstel
+  // 'list' = klantbulk-overzicht (start), 'detail' = fiche, 'manual' = blanco editor
   const [view, setView] = useState('list');
   const [selectedId, setSelectedId] = useState(null);
 
-  // Filter-state
-  const [tab, setTab] = useState('todo');
+  // Datum-filter (dit is de enige filter — geen tabs, geen zoek)
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [search, setSearch] = useState('');
-
-  // Voor 'Nieuw voorstel'-paneel bovenaan de lijst
-  const [showCreate, setShowCreate] = useState(false);
-  const [newKlant, setNewKlant] = useState(klanten[0]?.name || '');
-  const [newPeriod, setNewPeriod] = useState('April 2026');
 
   // Dialogs
   const [approveDialog, setApproveDialog] = useState(null);
   const [rejectDialog, setRejectDialog] = useState(null);
   const [bulkConfirm, setBulkConfirm] = useState(false);
 
-  // ===== AFGELEIDE DATA =====
-
-  // Filter proposals volgens tab + datum + zoek
-  const filtered = useMemo(() => {
+  // ===== KLANT-AGGREGAAT =====
+  // Eén regel per klant met werkbonnen in de geselecteerde periode.
+  // Toont som van uren + bedrag, en de status van het bestaand voorstel als dat bestaat.
+  const klantBuckets = useMemo(() => {
     const fromD = parseDateISO(dateFrom);
     const toD = parseDateISO(dateTo);
     if (toD) toD.setHours(23, 59, 59);
 
-    return proposals.filter(p => {
-      if (PHASE_OF[p.status] !== tab) return false;
-      const pDate = parseDateNL(p.createdDate);
-      if (fromD && pDate && pDate < fromD) return false;
-      if (toD && pDate && pDate > toD) return false;
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        if (!p.klant.toLowerCase().includes(q)
-          && !p.nr.toLowerCase().includes(q)
-          && !p.period.toLowerCase().includes(q)) return false;
-      }
+    // Filter werkbonnen op datum + status approved/disputed (factureerbaar)
+    const eligibleWb = werkbonnen.filter(w => {
+      if (w.status !== 'approved' || w.disputed) return false;
+      const d = parseDateNL(w.date);
+      if (fromD && d && d < fromD) return false;
+      if (toD && d && d > toD) return false;
       return true;
     });
-  }, [proposals, tab, dateFrom, dateTo, search]);
 
-  // Tellingen per tab (voor badges)
-  const tabCounts = useMemo(() => {
-    const c = { todo: 0, done: 0, sent: 0 };
-    proposals.forEach(p => { c[PHASE_OF[p.status]] = (c[PHASE_OF[p.status]] || 0) + 1; });
-    return c;
-  }, [proposals]);
+    // Groepeer per klant
+    const buckets = new Map();
+    eligibleWb.forEach(wb => {
+      if (!buckets.has(wb.klant)) {
+        buckets.set(wb.klant, { klant: wb.klant, count: 0, hours: 0, amount: 0, lines: [] });
+      }
+      const b = buckets.get(wb.klant);
+      b.count += 1;
+      b.hours += wb.bon || 0;
+      b.amount += (wb.bon || 0) * (wb.rate || 0);
+      b.lines.push(wb);
+    });
 
-  // Voor 'Nieuw voorstel'-paneel: hoeveel werkbonnen zijn factureerbaar?
-  const eligibleLines = werkbonnen.filter(w => w.klant === newKlant && w.status === 'approved' && !w.disputed);
-  const newSubtotal = eligibleLines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+    // Voor elke klant: vind eventueel bestaand voorstel dat overlapt met deze periode
+    const result = Array.from(buckets.values()).map(b => {
+      const existingProposal = proposals.find(p => {
+        if (p.klant !== b.klant) return false;
+        const pLineIds = p.lineIds || [];
+        // Voorstel matcht als minstens één werkbon uit de bucket erin zit
+        return b.lines.some(l => pLineIds.includes(l.id));
+      });
+      return { ...b, proposal: existingProposal || null };
+    });
+
+    // Alfabetisch sorteren op klant
+    result.sort((a, b) => a.klant.localeCompare(b.klant, 'nl-BE'));
+    return result;
+  }, [werkbonnen, proposals, dateFrom, dateTo]);
+
+  // Aantal goedgekeurde voorstellen in zicht (voor bulk-knop)
+  const approvedInView = klantBuckets.filter(b => b.proposal?.status === 'approved');
 
   // ===== ACTIES =====
 
-  const handleCreate = () => {
-    if (eligibleLines.length === 0) {
-      alert('Geen goedgekeurde werkbonnen voor deze klant in deze periode.');
-      return;
+  const openOrCreateForKlant = (bucket) => {
+    if (bucket.proposal) {
+      // Bestaand voorstel → openen
+      setSelectedId(bucket.proposal.id);
+      setView('detail');
+    } else {
+      // Geen voorstel: automatisch aanmaken vanuit goedgekeurde werkbonnen van deze klant in deze periode
+      const period = formatPeriod(dateFrom, dateTo);
+      const subtotal = bucket.lines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+      onCreate({ klant: bucket.klant, period, lines: bucket.lines, subtotal });
+      // Toast/feedback in App.jsx; user blijft op lijst-scherm en ziet het nieuwe voorstel verschijnen
     }
-    onCreate({ klant: newKlant, period: newPeriod, lines: eligibleLines, subtotal: newSubtotal });
-    setShowCreate(false);
   };
 
-  const openDetail = (id) => {
-    setSelectedId(id);
-    setView('detail');
-  };
   const backToList = () => {
     setView('list');
     setSelectedId(null);
   };
 
-  // Navigeer < of > binnen de huidige gefilterde lijst
   const navigateInList = (direction) => {
-    if (filtered.length === 0) return;
-    const idx = filtered.findIndex(p => p.id === selectedId);
+    // Navigeer < of > over alle klantbuckets met een bestaand voorstel
+    const proposalBuckets = klantBuckets.filter(b => b.proposal);
+    if (proposalBuckets.length === 0) return;
+    const idx = proposalBuckets.findIndex(b => b.proposal.id === selectedId);
     if (idx === -1) return;
     const nextIdx = direction === 'next'
-      ? Math.min(filtered.length - 1, idx + 1)
+      ? Math.min(proposalBuckets.length - 1, idx + 1)
       : Math.max(0, idx - 1);
-    setSelectedId(filtered[nextIdx].id);
+    setSelectedId(proposalBuckets[nextIdx].proposal.id);
   };
 
   const handleBulkSend = () => {
-    const ids = filtered.filter(p => p.status === 'approved').map(p => p.id);
+    const ids = approvedInView.map(b => b.proposal.id);
     if (ids.length === 0) return;
     onSendBulk(ids);
     setBulkConfirm(false);
   };
 
-  // ===== RENDER =====
-
-  // Detail-scherm (na dubbelklik)
+  // ===== RENDER: detail-scherm =====
   if (view === 'detail' && selectedId) {
     const proposal = proposals.find(p => p.id === selectedId);
     if (!proposal) {
-      // Voorstel verdwenen tussen klikken (bv. status gewijzigd, niet meer in filter)
       setView('list');
       return null;
     }
+    const proposalBuckets = klantBuckets.filter(b => b.proposal);
     return (
       <DetailView
         proposal={proposal}
         klanten={klanten}
-        siblings={filtered}
+        siblings={proposalBuckets.map(b => b.proposal)}
         onBack={backToList}
         onPrev={() => navigateInList('prev')}
         onNext={() => navigateInList('next')}
@@ -181,86 +183,36 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
     );
   }
 
-  // Lijst-scherm (start)
+  // ===== RENDER: manuele blanco editor =====
+  if (view === 'manual') {
+    return (
+      <ManualProposalEditor
+        klanten={klanten}
+        onCancel={backToList}
+        onSave={(data) => {
+          onCreateManual(data);
+          backToList();
+        }}
+      />
+    );
+  }
+
+  // ===== RENDER: bulklijst (klant-aggregaat) =====
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header met titel en 'Nieuw voorstel' */}
-      <div className="px-4 pt-4 pb-2 border-b border-slate-200 bg-white shrink-0">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b border-slate-200 bg-white shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-900">Facturatie</h2>
           <button
-            onClick={() => setShowCreate(s => !s)}
+            onClick={() => setView('manual')}
             className="text-[12px] px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
           >
-            {showCreate ? '× Sluiten' : '+ Nieuw voorstel'}
+            + Nieuw voorstel
           </button>
         </div>
 
-        {/* Inklapbaar 'Nieuw voorstel'-paneel */}
-        {showCreate && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3 flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Klant</label>
-              <select
-                value={newKlant}
-                onChange={e => setNewKlant(e.target.value)}
-                className="h-8 px-2 text-xs border border-slate-300 rounded bg-white min-w-[200px]"
-              >
-                {klanten.map(k => <option key={k.id} value={k.name}>{k.name}</option>)}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Periode</label>
-              <input
-                type="text"
-                value={newPeriod}
-                onChange={e => setNewPeriod(e.target.value)}
-                placeholder="bv. April 2026"
-                className="h-8 px-2 text-xs border border-slate-300 rounded bg-white"
-              />
-            </div>
-            <div className="flex flex-col gap-1 mr-3">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Te factureren</span>
-              <span className="text-xs font-medium">
-                {eligibleLines.length} regel{eligibleLines.length === 1 ? '' : 's'} · € {fmtEur(newSubtotal)}
-              </span>
-            </div>
-            <button
-              onClick={handleCreate}
-              disabled={eligibleLines.length === 0}
-              className={`h-8 px-3 text-xs rounded ${eligibleLines.length > 0
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
-            >
-              Voorstel aanmaken
-            </button>
-          </div>
-        )}
-
-        {/* TABS */}
-        <div className="flex gap-1 mb-3">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`text-[12px] px-3 py-1.5 rounded-md flex items-center gap-1.5 transition ${
-                tab === t.id
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
-              <span className={`text-[10px] px-1.5 py-0 rounded-full ${
-                tab === t.id ? 'bg-white/20' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {tabCounts[t.id] || 0}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Filters: datum + zoek */}
+        {/* Datum-filter */}
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-slate-500 uppercase tracking-wider">Vanaf</label>
@@ -285,74 +237,66 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
               onClick={() => { setDateFrom(''); setDateTo(''); }}
               className="h-8 px-2 text-[11px] text-slate-500 hover:text-slate-800"
             >
-              × wis datums
+              × wis
             </button>
           )}
-          <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider">Zoek</label>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Klant, nummer, periode..."
-              className="h-8 px-2 text-xs border border-slate-300 rounded bg-white"
-            />
-          </div>
+          <span className="ml-auto text-[11px] text-slate-500">
+            {klantBuckets.length} klant{klantBuckets.length === 1 ? '' : 'en'} met factureerbare werkbonnen
+          </span>
         </div>
       </div>
 
-      {/* LIJST */}
+      {/* Klant-aggregaat tabel */}
       <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
+        {klantBuckets.length === 0 ? (
           <div className="text-center text-xs text-slate-400 py-12">
-            {proposals.length === 0
-              ? 'Nog geen voorstellen aangemaakt. Klik op "+ Nieuw voorstel".'
-              : `Geen voorstellen in "${TABS.find(t => t.id === tab)?.label}" met deze filters.`}
+            {(dateFrom || dateTo)
+              ? 'Geen klanten met goedgekeurde werkbonnen in deze periode.'
+              : 'Selecteer een periode om de klantenlijst te zien.'}
           </div>
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider">
-                <th className="text-left px-4 py-2 font-medium">Datum</th>
-                <th className="text-left px-2 py-2 font-medium">Voorstel nr.</th>
-                <th className="text-left px-2 py-2 font-medium">Klant</th>
-                <th className="text-left px-2 py-2 font-medium">Periode</th>
-                <th className="text-right px-2 py-2 font-medium">Regels</th>
+                <th className="text-left px-4 py-2 font-medium">Klant</th>
+                <th className="text-right px-2 py-2 font-medium">Werkbonnen</th>
+                <th className="text-right px-2 py-2 font-medium">Uren</th>
                 <th className="text-right px-2 py-2 font-medium">Bedrag</th>
+                <th className="text-left px-2 py-2 font-medium">Voorstel</th>
                 <th className="text-left px-2 py-2 font-medium">Status</th>
                 <th className="text-right px-4 py-2 font-medium">Actie</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(p => {
-                const klantObj = klanten.find(k => k.name === p.klant);
+              {klantBuckets.map(b => {
+                const p = b.proposal;
+                const phaseColor = !p ? 'bg-slate-100 text-slate-600 border-slate-300'
+                  : STATUS_STYLES[p.status];
+                const phaseLabel = !p ? 'Niet aangemaakt'
+                  : STATUS_LABELS[p.status];
                 return (
                   <tr
-                    key={p.id}
-                    onDoubleClick={() => openDetail(p.id)}
+                    key={b.klant}
+                    onDoubleClick={() => openOrCreateForKlant(b)}
                     className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition"
-                    title="Dubbelklik om te openen"
+                    title="Dubbelklik om te openen of voorstel aan te maken"
                   >
-                    <td className="px-4 py-2 text-slate-600">{p.createdDate}</td>
-                    <td className="px-2 py-2 font-mono text-[11px] font-medium">{p.nr}</td>
-                    <td className="px-2 py-2 font-medium text-slate-900">{p.klant}</td>
-                    <td className="px-2 py-2 text-slate-600">{p.period}</td>
-                    <td className="px-2 py-2 text-right text-slate-600">{p.lines.length}</td>
-                    <td className="px-2 py-2 text-right font-medium">€ {fmtEur(p.subtotal)}</td>
+                    <td className="px-4 py-2 font-medium text-slate-900">{b.klant}</td>
+                    <td className="px-2 py-2 text-right text-slate-600">{b.count}</td>
+                    <td className="px-2 py-2 text-right text-slate-700 font-mono">{b.hours.toFixed(2).replace('.', ',')}</td>
+                    <td className="px-2 py-2 text-right font-medium">€ {fmtEur(b.amount)}</td>
+                    <td className="px-2 py-2 text-slate-500 font-mono text-[11px]">{p?.nr || '—'}</td>
                     <td className="px-2 py-2">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${STATUS_STYLES[p.status]}`}>
-                        {STATUS_LABELS[p.status]}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${phaseColor}`}>
+                        {phaseLabel}
                       </span>
-                      {p.poNr && (
-                        <span className="ml-1 text-[10px] text-slate-500">PO: {p.poNr === 'GEEN PO' ? '—' : p.poNr}</span>
-                      )}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <button
-                        onClick={(e) => { e.stopPropagation(); openDetail(p.id); }}
+                        onClick={(e) => { e.stopPropagation(); openOrCreateForKlant(b); }}
                         className="text-[11px] px-2 py-1 text-blue-700 hover:bg-blue-100 rounded"
                       >
-                        Open →
+                        {p ? 'Open →' : 'Aanmaken'}
                       </button>
                     </td>
                   </tr>
@@ -363,36 +307,31 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
         )}
       </div>
 
-      {/* FOOTER met bulk-knop alleen op Goedgekeurd-tab */}
-      {tab === 'done' && (
+      {/* Bulk-knop onderaan: alleen actief als er goedgekeurde voorstellen in zicht zijn */}
+      {approvedInView.length > 0 && (
         <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 flex items-center justify-between shrink-0">
           <span className="text-[11px] text-slate-600">
-            {filtered.length} goedgekeurd{filtered.length === 1 ? '' : 'e'} voorstel{filtered.length === 1 ? '' : 'len'} in deze selectie
+            {approvedInView.length} goedgekeurd{approvedInView.length === 1 ? '' : 'e'} voorstel{approvedInView.length === 1 ? '' : 'len'} klaar om te verzenden
           </span>
           <button
             onClick={() => setBulkConfirm(true)}
-            disabled={filtered.length === 0}
-            className={`text-[12px] px-4 py-2 rounded font-medium ${
-              filtered.length > 0
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
+            className="text-[12px] px-4 py-2 rounded font-medium bg-blue-600 text-white hover:bg-blue-700"
           >
-            📤 Verzend alles ({filtered.length}) naar klanten
+            📤 Verzend alle goedgekeurde ({approvedInView.length}) naar klanten
           </button>
         </div>
       )}
 
-      {/* Bulk-bevestiging dialog */}
+      {/* Bulk-bevestiging */}
       {bulkConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-[480px] max-w-[95vw] p-5">
             <h3 className="text-base font-semibold mb-2">Bulk verzending bevestigen</h3>
             <p className="text-sm text-slate-700 mb-4">
-              Je staat op het punt <strong>{filtered.length} voorstel{filtered.length === 1 ? '' : 'len'}</strong> tegelijk te verzenden naar de respectieve klanten. Hun status wordt op <strong>Verzonden</strong> gezet en ze verschijnen niet meer in dit tabblad.
+              Je staat op het punt <strong>{approvedInView.length} voorstel{approvedInView.length === 1 ? '' : 'len'}</strong> tegelijk te verzenden naar de respectieve klanten. Hun status wordt op <strong>Verzonden</strong> gezet.
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-4 text-[11px] text-amber-900">
-              ⚠ Deze actie kan niet ongedaan gemaakt worden via één klik. Individuele voorstellen kan je later wel heropenen via de detail-pagina.
+              ⚠ Individuele voorstellen kan je later wel heropenen via de detail-pagina.
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -411,30 +350,254 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
           </div>
         </div>
       )}
-
-      {/* Approve / Reject dialogs (kunnen ook vanuit lijst geopend worden in toekomst) */}
-      {approveDialog && (
-        <ApproveDialog
-          proposal={approveDialog}
-          klanten={klanten}
-          onCancel={() => setApproveDialog(null)}
-          onConfirm={(payload) => { onApprove(approveDialog.id, payload); setApproveDialog(null); }}
-        />
-      )}
-      {rejectDialog && (
-        <RejectDialog
-          proposal={rejectDialog}
-          onCancel={() => setRejectDialog(null)}
-          onConfirm={(reason) => { onReject(rejectDialog.id, reason); setRejectDialog(null); }}
-        />
-      )}
     </div>
   );
 }
 
 // =============================================================================
-// DETAIL VIEW — fiche van één voorstel
+// MANUAL PROPOSAL EDITOR — blanco fiche voor uitzonderingen
+// (reparaties, verkoop, vergoedingen die niet uit werkbonnen komen)
 // =============================================================================
+function ManualProposalEditor({ klanten, onCancel, onSave }) {
+  const [klantName, setKlantName] = useState(klanten[0]?.name || '');
+  const [period, setPeriod] = useState('');
+  const [lines, setLines] = useState([
+    { id: 'm-' + Date.now(), date: '', werf: '', machine: '', worker: '', bon: 0, rate: 0, nota: '' }
+  ]);
+
+  const klantObj = klanten.find(k => k.name === klantName);
+
+  const updateLine = (id, patch) => {
+    setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  };
+  const addLine = () => {
+    setLines(prev => [...prev, {
+      id: 'm-' + Date.now() + '-' + prev.length,
+      date: '', werf: '', machine: '', worker: '', bon: 0, rate: 0, nota: ''
+    }]);
+  };
+  const removeLine = (id) => {
+    setLines(prev => prev.length > 1 ? prev.filter(l => l.id !== id) : prev);
+  };
+
+  const subtotal = lines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+  const vat = subtotal * 0.21;
+  const total = subtotal + vat;
+
+  const canSave = klantName && lines.some(l => (l.bon || 0) > 0 && (l.rate || 0) > 0);
+
+  const handleSave = () => {
+    if (!canSave) return;
+    // Filter lege regels uit
+    const validLines = lines.filter(l => (l.bon || 0) > 0 || (l.rate || 0) > 0);
+    onSave({
+      klant: klantName,
+      period: period || 'Manueel',
+      lines: validLines,
+      subtotal
+    });
+  };
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-200 bg-white shrink-0 flex items-center gap-3">
+        <button onClick={onCancel} className="text-[12px] text-slate-600 hover:text-slate-900">
+          ← Annuleren
+        </button>
+        <div className="h-5 w-px bg-slate-300" />
+        <span className="text-sm font-semibold text-slate-900">Nieuw voorstel — manuele invoer</span>
+        <span className="text-[11px] text-slate-500">Voor reparaties, verkoop, vergoedingen die niet uit werkbonnen komen</span>
+        <button
+          onClick={handleSave}
+          disabled={!canSave}
+          className={`ml-auto text-[12px] px-4 py-1.5 rounded font-medium ${
+            canSave
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          Opslaan als concept
+        </button>
+      </div>
+
+      {/* Form */}
+      <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
+        <div className="max-w-4xl mx-auto bg-white shadow-sm rounded p-5 text-xs">
+          {/* DMVH header — visueel als de PDF-preview */}
+          <div className="flex justify-between mb-4">
+            <div>
+              <div className="font-semibold text-sm">Demaecker &amp; Vanhaecke</div>
+              <div className="text-slate-500 leading-relaxed">
+                Dorpweg 35, 8377 Zuienkerke<br />
+                BTW BE 0420.343.659<br />
+                Tel. 050/31 63 27
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-semibold text-sm text-blue-800">VOORSTEL TOT FACTURATIE</div>
+              <div className="text-slate-500">Concept — niet opgeslagen</div>
+            </div>
+          </div>
+
+          {/* Klant kiezen */}
+          <div className="border-t border-slate-200 pt-3 mb-4 grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Factuur aan</label>
+              <select
+                value={klantName}
+                onChange={e => setKlantName(e.target.value)}
+                className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+              >
+                {klanten.map(k => <option key={k.id} value={k.name}>{k.name}</option>)}
+              </select>
+              {klantObj && (
+                <div className="text-[11px] text-slate-600 mt-1">
+                  {klantObj.address}<br />BTW: {klantObj.vat}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Periode / referentie</label>
+              <input
+                type="text"
+                value={period}
+                onChange={e => setPeriod(e.target.value)}
+                placeholder="bv. April 2026, of 'Reparatie kraan #34'"
+                className="w-full h-8 px-2 text-xs border border-slate-300 rounded bg-white"
+              />
+            </div>
+          </div>
+
+          {/* Regels */}
+          <table className="w-full border-collapse mb-3">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase">
+                <th className="text-left py-1 w-24">Datum</th>
+                <th className="text-left">Werf</th>
+                <th className="text-left">Machine + bestuurder</th>
+                <th className="text-right w-20">Uren</th>
+                <th className="text-right w-24">Tarief</th>
+                <th className="text-right w-24">Bedrag</th>
+                <th className="w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map(l => (
+                <tr key={l.id} className="border-b border-slate-100">
+                  <td className="py-1 pr-1">
+                    <input
+                      type="text"
+                      value={l.date}
+                      onChange={e => updateLine(l.id, { date: e.target.value })}
+                      placeholder="dd/mm/jjjj"
+                      className="w-full px-1 py-0.5 text-xs border border-slate-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                  </td>
+                  <td className="pr-1">
+                    <input
+                      type="text"
+                      value={l.werf}
+                      onChange={e => updateLine(l.id, { werf: e.target.value })}
+                      placeholder="—"
+                      className="w-full px-1 py-0.5 text-xs border border-slate-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                  </td>
+                  <td className="pr-1">
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={l.machine}
+                        onChange={e => updateLine(l.id, { machine: e.target.value })}
+                        placeholder="Machine of dienst"
+                        className="flex-1 px-1 py-0.5 text-xs border border-slate-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={l.worker}
+                        onChange={e => updateLine(l.id, { worker: e.target.value })}
+                        placeholder="Bestuurder (optioneel)"
+                        className="flex-1 px-1 py-0.5 text-xs border border-slate-200 rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                      />
+                    </div>
+                  </td>
+                  <td className="text-right pr-1">
+                    <input
+                      type="number"
+                      step="0.25"
+                      value={l.bon || ''}
+                      onChange={e => updateLine(l.id, { bon: parseFloat(e.target.value) || 0 })}
+                      placeholder="0"
+                      className="w-full px-1 py-0.5 text-xs border border-slate-200 rounded text-right focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                  </td>
+                  <td className="text-right pr-1">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={l.rate || ''}
+                      onChange={e => updateLine(l.id, { rate: parseFloat(e.target.value) || 0 })}
+                      placeholder="0,00"
+                      className="w-full px-1 py-0.5 text-xs border border-slate-200 rounded text-right focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none"
+                    />
+                  </td>
+                  <td className="text-right pr-1 font-medium">
+                    € {fmtEur((l.bon || 0) * (l.rate || 0))}
+                  </td>
+                  <td className="text-right">
+                    {lines.length > 1 && (
+                      <button
+                        onClick={() => removeLine(l.id)}
+                        className="text-red-500 hover:text-red-700 text-base leading-none"
+                        title="Regel verwijderen"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <button
+            onClick={addLine}
+            className="text-[11px] px-2 py-1 rounded bg-slate-100 text-slate-700 hover:bg-slate-200 mb-4"
+          >
+            + Regel toevoegen
+          </button>
+
+          {/* Totalen */}
+          <div className="ml-auto w-1/2 mt-3 text-[11px]">
+            <div className="flex justify-between py-0.5"><span>Subtotaal</span><span>€ {fmtEur(subtotal)}</span></div>
+            <div className="flex justify-between py-0.5 text-slate-500"><span>BTW 21%</span><span>€ {fmtEur(vat)}</span></div>
+            <div className="flex justify-between py-1 border-t border-slate-200 font-semibold"><span>Totaal</span><span>€ {fmtEur(total)}</span></div>
+          </div>
+
+          {!canSave && (
+            <div className="mt-3 bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-900">
+              ⚠ Vul minstens één regel in met uren en tarief om dit voorstel op te slaan.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper: zet datum-range om naar leesbare periode-string
+function formatPeriod(from, to) {
+  if (!from && !to) return 'Alle';
+  if (from && !to) return `Vanaf ${formatDateShort(from)}`;
+  if (!from && to) return `Tot ${formatDateShort(to)}`;
+  return `${formatDateShort(from)} — ${formatDateShort(to)}`;
+}
+function formatDateShort(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
 function DetailView({
   proposal, klanten, siblings,
   onBack, onPrev, onNext,
