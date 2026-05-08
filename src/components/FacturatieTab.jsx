@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { exportProposalToExcel } from './excelExport.js';
 
 const fmtEur = (n) => n.toLocaleString('nl-BE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,7 +43,7 @@ const parseDateNL = (s) => {
 // yyyy-mm-dd (HTML date input) → Date
 const parseDateISO = (s) => s ? new Date(s + 'T00:00:00') : null;
 
-export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onCreateManual, onSend, onSendBulk, onUpdateLine, onApprove, onReject, onConvertToInvoice, onReopen }) {
+export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onCreateManual, onSend, onSendBulk, onUpdateLine, onUpdatePO, onApprove, onReject, onConvertToInvoice, onReopen }) {
   // ===== VIEW STATE =====
   // 'list' = klantbulk-overzicht (start), 'detail' = fiche, 'manual' = blanco editor
   const [view, setView] = useState('list');
@@ -167,6 +167,7 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
         onReject={() => setRejectDialog(proposal)}
         onSend={() => onSend(proposal.id)}
         onUpdateLine={(lineId, patch) => onUpdateLine(proposal.id, lineId, patch)}
+        onUpdatePO={(poNr) => onUpdatePO && onUpdatePO(proposal.id, poNr)}
         onConvert={() => onConvertToInvoice(proposal.id)}
         onReopen={() => onReopen(proposal.id)}
         onExportExcel={() => {
@@ -601,7 +602,7 @@ function formatDateShort(iso) {
 function DetailView({
   proposal, klanten, siblings,
   onBack, onPrev, onNext,
-  onApprove, onReject, onSend, onUpdateLine, onConvert, onReopen, onExportExcel,
+  onApprove, onReject, onSend, onUpdateLine, onUpdatePO, onConvert, onReopen, onExportExcel,
   approveDialog, rejectDialog, onCloseApprove, onCloseReject,
   onConfirmApprove, onConfirmReject
 }) {
@@ -638,30 +639,38 @@ function DetailView({
           </span>
         </div>
 
-        {/* Navigatie pijlen */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Navigatie pijlen — duidelijke ronde knoppen met SVG-pijlen */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onPrev}
             disabled={isFirst}
-            className={`w-7 h-7 rounded flex items-center justify-center ${
-              isFirst ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'
+            className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition ${
+              isFirst
+                ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                : 'border-slate-300 text-slate-700 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 bg-white'
             }`}
-            title="Vorige (in huidige selectie)"
+            title="Vorige klant"
           >
-            ←
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
           </button>
-          <span className="text-[11px] text-slate-500 px-2">
+          <span className="text-xs font-medium text-slate-600 px-2 min-w-[3.5rem] text-center">
             {idx + 1} / {total}
           </span>
           <button
             onClick={onNext}
             disabled={isLast}
-            className={`w-7 h-7 rounded flex items-center justify-center ${
-              isLast ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'
+            className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition ${
+              isLast
+                ? 'border-slate-200 text-slate-300 cursor-not-allowed bg-slate-50'
+                : 'border-slate-300 text-slate-700 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 bg-white'
             }`}
-            title="Volgende (in huidige selectie)"
+            title="Volgende klant"
           >
-            →
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         </div>
       </div>
@@ -731,11 +740,9 @@ function DetailView({
         </div>
       )}
 
-      {/* PDF preview altijd zichtbaar */}
-      <div className="flex-1 overflow-y-auto bg-slate-100 p-6">
-        <div className="max-w-4xl mx-auto bg-white shadow-sm rounded">
-          <PdfPreview proposal={proposal} klant={klantObj} onUpdateLine={onUpdateLine} />
-        </div>
+      {/* PDF preview altijd zichtbaar — volledige breedte rand-tot-rand */}
+      <div className="flex-1 overflow-y-auto bg-white">
+        <PdfPreview proposal={proposal} klant={klantObj} onUpdateLine={onUpdateLine} onUpdatePO={onUpdatePO} />
       </div>
 
       {/* Dialogs */}
@@ -759,7 +766,7 @@ function DetailView({
 }
 
 
-function PdfPreview({ proposal, klant, onUpdateLine }) {
+function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO }) {
   const isInvoice = proposal.status === 'invoiced' || proposal.status === 'paid';
   const title = isInvoice ? 'FACTUUR' : 'VOORSTEL TOT FACTURATIE';
   const subtotal = proposal.subtotal;
@@ -768,6 +775,17 @@ function PdfPreview({ proposal, klant, onUpdateLine }) {
 
   // Bewerken alleen toegestaan in 'draft' (Concept) status — daarna bevroren.
   const canEdit = proposal.status === 'draft' && typeof onUpdateLine === 'function';
+  const canEditPO = proposal.status === 'draft' && typeof onUpdatePO === 'function';
+
+  // Lokale draft van PO terwijl gebruiker tikt — commit op blur of Enter
+  const [poDraft, setPoDraft] = useState(proposal.poNr || '');
+  useEffect(() => { setPoDraft(proposal.poNr || ''); }, [proposal.id, proposal.poNr]);
+
+  const commitPO = () => {
+    if (poDraft.trim() !== (proposal.poNr || '').trim()) {
+      onUpdatePO(poDraft.trim() || null);
+    }
+  };
 
   // Combineer Machine + Bestuurder. Bij HEMZELF (naakte verhuur) toon enkel machine.
   const formatMachineWorker = (line) => {
@@ -779,7 +797,7 @@ function PdfPreview({ proposal, klant, onUpdateLine }) {
   };
 
   return (
-    <div className="border-t border-slate-200 p-5 bg-white text-xs">
+    <div className="px-8 py-6 bg-white text-xs">
       <div className="flex justify-between mb-4">
         <div>
           <div className="font-semibold text-sm">Demaecker &amp; Vanhaecke</div>
@@ -796,9 +814,31 @@ function PdfPreview({ proposal, klant, onUpdateLine }) {
             Datum: {proposal.createdDate}<br />
             Periode: {proposal.period}
           </div>
-          {proposal.poNr && proposal.poNr !== 'GEEN PO' && (
-            <div className="mt-1 text-slate-700"><span className="text-slate-500">PO ref:</span> <span className="font-mono">{proposal.poNr}</span></div>
-          )}
+          {/* PO-referentie — editeerbaar in concept, anders read-only */}
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider">PO ref:</span>
+            {canEditPO ? (
+              <input
+                type="text"
+                value={poDraft}
+                onChange={e => setPoDraft(e.target.value)}
+                onBlur={commitPO}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+                  if (e.key === 'Escape') { setPoDraft(proposal.poNr || ''); e.target.blur(); }
+                }}
+                placeholder="PO nummer..."
+                className="text-[11px] font-mono px-1.5 py-0.5 border border-slate-200 rounded text-right hover:border-blue-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none w-32"
+                title="PO-nummer ingeven (klant geeft dit door bij goedkeuring)"
+              />
+            ) : (
+              <span className="text-[11px] font-mono text-slate-700">
+                {proposal.poNr && proposal.poNr !== 'GEEN PO'
+                  ? proposal.poNr
+                  : <span className="italic text-slate-400 normal-case">geen</span>}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

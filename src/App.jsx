@@ -713,6 +713,16 @@ export default function App() {
     }));
   };
 
+  // PO-referentie manueel toevoegen of wijzigen in concept-fase.
+  // Wordt overschreven als de klant later een ander PO doorgeeft via approve-dialog.
+  const proposalUpdatePO = (proposalId, poNr) => {
+    setProposals(prev => prev.map(p => {
+      if (p.id !== proposalId) return p;
+      if (p.status !== 'draft') return p;
+      return { ...p, poNr: poNr || null };
+    }));
+  };
+
   const proposalApprove = (id, { poNr, note, date }) => {
     setProposals(prev => prev.map(p =>
       p.id === id ? { ...p, status: 'approved', poNr, approveNote: note, approveDate: date } : p
@@ -1065,6 +1075,7 @@ export default function App() {
             onSend={proposalSend}
             onSendBulk={proposalSendBulk}
             onUpdateLine={proposalUpdateLine}
+            onUpdatePO={proposalUpdatePO}
             onApprove={proposalApprove}
             onReject={proposalReject}
             onConvertToInvoice={proposalConvert}
