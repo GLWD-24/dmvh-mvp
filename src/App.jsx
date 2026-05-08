@@ -723,6 +723,30 @@ export default function App() {
     }));
   };
 
+  // Voeg een manuele regel toe aan een bestaand voorstel (alleen in concept-fase).
+  // Niet gekoppeld aan een werkbon — voor extras zoals transportkost, korting, enz.
+  const proposalAddLine = (proposalId, line) => {
+    setProposals(prev => prev.map(p => {
+      if (p.id !== proposalId) return p;
+      if (p.status !== 'draft') return p;
+      const newLine = {
+        id: 'manual-' + Date.now(),
+        date: line.date || '',
+        werf: line.werf || '',
+        machine: line.machine || '',
+        worker: line.worker || '',
+        bon: line.bon || 0,
+        rate: line.rate || 0,
+        nota: line.nota || '',
+        manual: true   // markeer als manueel toegevoegd
+      };
+      const newLines = [...p.lines, newLine];
+      const newSubtotal = newLines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+      return { ...p, lines: newLines, subtotal: newSubtotal };
+    }));
+    showToast('Regel toegevoegd');
+  };
+
   const proposalApprove = (id, { poNr, note, date }) => {
     setProposals(prev => prev.map(p =>
       p.id === id ? { ...p, status: 'approved', poNr, approveNote: note, approveDate: date } : p
@@ -1076,6 +1100,7 @@ export default function App() {
             onSendBulk={proposalSendBulk}
             onUpdateLine={proposalUpdateLine}
             onUpdatePO={proposalUpdatePO}
+            onAddLine={proposalAddLine}
             onApprove={proposalApprove}
             onReject={proposalReject}
             onConvertToInvoice={proposalConvert}

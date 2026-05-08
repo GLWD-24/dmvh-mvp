@@ -43,7 +43,7 @@ const parseDateNL = (s) => {
 // yyyy-mm-dd (HTML date input) → Date
 const parseDateISO = (s) => s ? new Date(s + 'T00:00:00') : null;
 
-export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onCreateManual, onSend, onSendBulk, onUpdateLine, onUpdatePO, onApprove, onReject, onConvertToInvoice, onReopen }) {
+export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onCreateManual, onSend, onSendBulk, onUpdateLine, onUpdatePO, onAddLine, onApprove, onReject, onConvertToInvoice, onReopen }) {
   // ===== VIEW STATE =====
   // 'list' = klantbulk-overzicht (start), 'detail' = fiche, 'manual' = blanco editor
   const [view, setView] = useState('list');
@@ -128,16 +128,52 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
     setSelectedId(null);
   };
 
+  // Wanneer we naar een klant willen navigeren die nog geen voorstel heeft,
+  // markeren we hem als 'pending' — een useEffect maakt dan de switch zodra
+  // het voorstel via onCreate is aangemaakt.
+  const [pendingKlant, setPendingKlant] = useState(null);
+
+  useEffect(() => {
+    if (!pendingKlant) return;
+    const found = proposals.find(p => p.klant === pendingKlant);
+    if (found) {
+      setSelectedId(found.id);
+      setPendingKlant(null);
+    }
+  }, [proposals, pendingKlant]);
+
   const navigateInList = (direction) => {
-    // Navigeer < of > over alle klantbuckets met een bestaand voorstel
-    const proposalBuckets = klantBuckets.filter(b => b.proposal);
-    if (proposalBuckets.length === 0) return;
-    const idx = proposalBuckets.findIndex(b => b.proposal.id === selectedId);
-    if (idx === -1) return;
+    // Navigeer over ALLE klantbuckets — ook degene zonder bestaand voorstel.
+    // Bij navigatie naar een klant zonder voorstel wordt er automatisch eentje
+    // aangemaakt vanuit de werkbonnen van die klant in de huidige periode.
+    if (klantBuckets.length === 0) return;
+
+    // Vind huidige index. Liefst via klant-naam (werkt ook voor manual proposals).
+    const currentProposal = proposals.find(p => p.id === selectedId);
+    const currentKlantName = currentProposal?.klant;
+    const idx = klantBuckets.findIndex(b => b.klant === currentKlantName);
+
+    // Als huidige klant niet in de buckets zit (bv. manueel voorstel buiten periode),
+    // start vanaf -1 zodat 'next' naar de eerste gaat.
+    const startIdx = idx === -1 ? (direction === 'next' ? -1 : klantBuckets.length) : idx;
+
     const nextIdx = direction === 'next'
-      ? Math.min(proposalBuckets.length - 1, idx + 1)
-      : Math.max(0, idx - 1);
-    setSelectedId(proposalBuckets[nextIdx].proposal.id);
+      ? Math.min(klantBuckets.length - 1, startIdx + 1)
+      : Math.max(0, startIdx - 1);
+
+    if (nextIdx === idx) return; // al aan de rand
+
+    const target = klantBuckets[nextIdx];
+    if (target.proposal) {
+      // Bestaand voorstel → switch onmiddellijk
+      setSelectedId(target.proposal.id);
+    } else {
+      // Geen voorstel → maak aan en wacht op useEffect-switch
+      const period = formatPeriod(dateFrom, dateTo);
+      const subtotal = target.lines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+      onCreate({ klant: target.klant, period, lines: target.lines, subtotal });
+      setPendingKlant(target.klant);
+    }
   };
 
   const handleBulkSend = () => {
@@ -154,12 +190,16 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
       setView('list');
       return null;
     }
-    const proposalBuckets = klantBuckets.filter(b => b.proposal);
+    // Positie binnen de volledige klant-bucket-lijst
+    const bucketIdx = klantBuckets.findIndex(b => b.klant === proposal.klant);
+    const bucketTotal = klantBuckets.length;
+
     return (
       <DetailView
         proposal={proposal}
         klanten={klanten}
-        siblings={proposalBuckets.map(b => b.proposal)}
+        bucketIdx={bucketIdx}
+        bucketTotal={bucketTotal}
         onBack={backToList}
         onPrev={() => navigateInList('prev')}
         onNext={() => navigateInList('next')}
@@ -168,6 +208,7 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
         onSend={() => onSend(proposal.id)}
         onUpdateLine={(lineId, patch) => onUpdateLine(proposal.id, lineId, patch)}
         onUpdatePO={(poNr) => onUpdatePO && onUpdatePO(proposal.id, poNr)}
+        onAddLine={(line) => onAddLine && onAddLine(proposal.id, line)}
         onConvert={() => onConvertToInvoice(proposal.id)}
         onReopen={() => onReopen(proposal.id)}
         onExportExcel={() => {
@@ -264,8 +305,7 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
                 <th className="text-right px-2 py-2 font-medium">Uren</th>
                 <th className="text-right px-2 py-2 font-medium">Bedrag</th>
                 <th className="text-left px-2 py-2 font-medium">Voorstel</th>
-                <th className="text-left px-2 py-2 font-medium">Status</th>
-                <th className="text-right px-4 py-2 font-medium">Actie</th>
+                <th className="text-left px-4 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -279,26 +319,18 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
                   <tr
                     key={b.klant}
                     onDoubleClick={() => openOrCreateForKlant(b)}
-                    className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition"
-                    title="Dubbelklik om te openen of voorstel aan te maken"
+                    className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer transition select-none"
+                    title="Dubbelklik om te openen"
                   >
                     <td className="px-4 py-2 font-medium text-slate-900">{b.klant}</td>
                     <td className="px-2 py-2 text-right text-slate-600">{b.count}</td>
                     <td className="px-2 py-2 text-right text-slate-700 font-mono">{b.hours.toFixed(2).replace('.', ',')}</td>
                     <td className="px-2 py-2 text-right font-medium">€ {fmtEur(b.amount)}</td>
                     <td className="px-2 py-2 text-slate-500 font-mono text-[11px]">{p?.nr || '—'}</td>
-                    <td className="px-2 py-2">
+                    <td className="px-4 py-2">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${phaseColor}`}>
                         {phaseLabel}
                       </span>
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openOrCreateForKlant(b); }}
-                        className="text-[11px] px-2 py-1 text-blue-700 hover:bg-blue-100 rounded"
-                      >
-                        {p ? 'Open →' : 'Aanmaken'}
-                      </button>
                     </td>
                   </tr>
                 );
@@ -600,15 +632,15 @@ function formatDateShort(iso) {
 }
 
 function DetailView({
-  proposal, klanten, siblings,
+  proposal, klanten, bucketIdx, bucketTotal,
   onBack, onPrev, onNext,
-  onApprove, onReject, onSend, onUpdateLine, onUpdatePO, onConvert, onReopen, onExportExcel,
+  onApprove, onReject, onSend, onUpdateLine, onUpdatePO, onAddLine, onConvert, onReopen, onExportExcel,
   approveDialog, rejectDialog, onCloseApprove, onCloseReject,
   onConfirmApprove, onConfirmReject
 }) {
   const klantObj = klanten.find(k => k.name === proposal.klant);
-  const idx = siblings.findIndex(s => s.id === proposal.id);
-  const total = siblings.length;
+  const idx = bucketIdx >= 0 ? bucketIdx : 0;
+  const total = Math.max(bucketTotal, 1);
   const isFirst = idx === 0;
   const isLast = idx === total - 1;
 
@@ -742,7 +774,7 @@ function DetailView({
 
       {/* PDF preview altijd zichtbaar — volledige breedte rand-tot-rand */}
       <div className="flex-1 overflow-y-auto bg-white">
-        <PdfPreview proposal={proposal} klant={klantObj} onUpdateLine={onUpdateLine} onUpdatePO={onUpdatePO} />
+        <PdfPreview proposal={proposal} klant={klantObj} onUpdateLine={onUpdateLine} onUpdatePO={onUpdatePO} onAddLine={onAddLine} />
       </div>
 
       {/* Dialogs */}
@@ -766,7 +798,7 @@ function DetailView({
 }
 
 
-function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO }) {
+function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO, onAddLine }) {
   const isInvoice = proposal.status === 'invoiced' || proposal.status === 'paid';
   const title = isInvoice ? 'FACTUUR' : 'VOORSTEL TOT FACTURATIE';
   const subtotal = proposal.subtotal;
@@ -776,6 +808,25 @@ function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO }) {
   // Bewerken alleen toegestaan in 'draft' (Concept) status — daarna bevroren.
   const canEdit = proposal.status === 'draft' && typeof onUpdateLine === 'function';
   const canEditPO = proposal.status === 'draft' && typeof onUpdatePO === 'function';
+  const canAddLine = proposal.status === 'draft' && typeof onAddLine === 'function';
+
+  // State voor inline 'nieuwe regel'-row die verschijnt onder de tabel
+  const [showNewRow, setShowNewRow] = useState(false);
+  const [newRow, setNewRow] = useState({ date: '', werf: '', machine: '', worker: '', bon: 0, rate: 0 });
+
+  const resetNewRow = () => {
+    setNewRow({ date: '', werf: '', machine: '', worker: '', bon: 0, rate: 0 });
+    setShowNewRow(false);
+  };
+  const commitNewRow = () => {
+    // Voeg toe als minstens uren of bedrag is ingevuld
+    if ((newRow.bon || 0) === 0 && (newRow.rate || 0) === 0) {
+      resetNewRow();
+      return;
+    }
+    onAddLine(newRow);
+    resetNewRow();
+  };
 
   // Lokale draft van PO terwijl gebruiker tikt — commit op blur of Enter
   const [poDraft, setPoDraft] = useState(proposal.poNr || '');
@@ -874,10 +925,13 @@ function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO }) {
         </thead>
         <tbody>
           {proposal.lines.map(l => (
-            <tr key={l.id} className="border-b border-slate-100">
+            <tr key={l.id} className={`border-b border-slate-100 ${l.manual ? 'bg-amber-50/40' : ''}`}>
               <td className="py-1">{l.date}</td>
               <td className="text-slate-500">{l.werf}</td>
-              <td>{formatMachineWorker(l)}</td>
+              <td>
+                {formatMachineWorker(l)}
+                {l.manual && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium uppercase">Manueel</span>}
+              </td>
               <td className="text-right">
                 {canEdit ? (
                   <EditableCell
@@ -905,8 +959,100 @@ function PdfPreview({ proposal, klant, onUpdateLine, onUpdatePO }) {
               <td className="text-right font-medium">€ {fmtEur((l.bon || 0) * (l.rate || 0))}</td>
             </tr>
           ))}
+
+          {/* Inline 'nieuwe regel' input — verschijnt na klik op + Regel toevoegen */}
+          {showNewRow && (
+            <tr className="border-b border-slate-100 bg-blue-50/40">
+              <td className="py-1 pr-1">
+                <input
+                  type="text"
+                  value={newRow.date}
+                  onChange={e => setNewRow(r => ({ ...r, date: e.target.value }))}
+                  placeholder="dd/mm/jjjj"
+                  className="w-24 px-1 py-0.5 text-xs border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </td>
+              <td className="pr-1">
+                <input
+                  type="text"
+                  value={newRow.werf}
+                  onChange={e => setNewRow(r => ({ ...r, werf: e.target.value }))}
+                  placeholder="—"
+                  className="w-full px-1 py-0.5 text-xs border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </td>
+              <td className="pr-1">
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={newRow.machine}
+                    onChange={e => setNewRow(r => ({ ...r, machine: e.target.value }))}
+                    placeholder="Machine of dienst"
+                    className="flex-1 px-1 py-0.5 text-xs border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    value={newRow.worker}
+                    onChange={e => setNewRow(r => ({ ...r, worker: e.target.value }))}
+                    placeholder="Bestuurder"
+                    className="flex-1 px-1 py-0.5 text-xs border border-slate-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </td>
+              <td className="text-right pr-1">
+                <input
+                  type="number"
+                  step="0.25"
+                  value={newRow.bon || ''}
+                  onChange={e => setNewRow(r => ({ ...r, bon: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0"
+                  className="w-16 px-1 py-0.5 text-xs border border-slate-300 rounded text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </td>
+              <td className="text-right pr-1">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newRow.rate || ''}
+                  onChange={e => setNewRow(r => ({ ...r, rate: parseFloat(e.target.value) || 0 }))}
+                  placeholder="0,00"
+                  className="w-20 px-1 py-0.5 text-xs border border-slate-300 rounded text-right focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </td>
+              <td className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <span className="font-medium mr-1">€ {fmtEur((newRow.bon || 0) * (newRow.rate || 0))}</span>
+                  <button
+                    onClick={commitNewRow}
+                    className="text-emerald-700 hover:bg-emerald-100 rounded px-1.5 py-0.5 text-xs"
+                    title="Toevoegen"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={resetNewRow}
+                    className="text-slate-500 hover:bg-slate-200 rounded px-1.5 py-0.5 text-xs"
+                    title="Annuleren"
+                  >
+                    ×
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
+
+      {/* + Regel toevoegen knop — alleen in concept */}
+      {canAddLine && !showNewRow && (
+        <button
+          onClick={() => setShowNewRow(true)}
+          className="mt-2 text-[11px] px-2.5 py-1 rounded bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-dashed border-slate-300 hover:border-blue-400 transition flex items-center gap-1"
+          title="Voeg een handmatige regel toe (transport, korting, opmerking)"
+        >
+          <span className="text-base leading-none">+</span> Regel toevoegen
+        </button>
+      )}
 
       <div className="ml-auto w-1/2 mt-3 text-[11px]">
         <div className="flex justify-between py-0.5"><span>Subtotaal</span><span>€ {fmtEur(subtotal)}</span></div>
