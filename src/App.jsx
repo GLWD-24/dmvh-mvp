@@ -661,6 +661,18 @@ export default function App() {
     setStatus({ text: 'In afwachting van klant', kind: 'warn' });
   };
 
+  // Bulk-verzending: alle 'approved' voorstellen tegelijk verzenden naar klant.
+  // Het Goedgekeurd-tab toont deze knop. Ideaal voor maandelijkse facturatie-ronde
+  // of voor klanten die elke 15 dagen factureren (datumfilter doet de rest).
+  const proposalSendBulk = (ids) => {
+    if (!ids || ids.length === 0) return;
+    setProposals(prev => prev.map(p =>
+      ids.includes(p.id) ? { ...p, status: 'sent' } : p
+    ));
+    showToast(`${ids.length} voorstel${ids.length === 1 ? '' : 'len'} verzonden naar klant`, 'success');
+    setStatus({ text: `${ids.length} voorstellen verzonden`, kind: 'success' });
+  };
+
   // Bewerk één regel van een Concept-voorstel — uren of tarief.
   // Werkbon zelf blijft ongewijzigd; override leeft alleen op de factuurregel
   // zodat de audit-trail van de oorspronkelijke werkbon intact blijft.
@@ -1023,6 +1035,7 @@ export default function App() {
             proposals={proposals}
             onCreate={proposalCreate}
             onSend={proposalSend}
+            onSendBulk={proposalSendBulk}
             onUpdateLine={proposalUpdateLine}
             onApprove={proposalApprove}
             onReject={proposalReject}
