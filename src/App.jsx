@@ -661,6 +661,19 @@ export default function App() {
     setStatus({ text: 'In afwachting van klant', kind: 'warn' });
   };
 
+  // Bewerk één regel van een Concept-voorstel — uren of tarief.
+  // Werkbon zelf blijft ongewijzigd; override leeft alleen op de factuurregel
+  // zodat de audit-trail van de oorspronkelijke werkbon intact blijft.
+  const proposalUpdateLine = (proposalId, lineId, patch) => {
+    setProposals(prev => prev.map(p => {
+      if (p.id !== proposalId) return p;
+      if (p.status !== 'draft') return p; // bevroren na verzending
+      const newLines = p.lines.map(l => l.id === lineId ? { ...l, ...patch } : l);
+      const newSubtotal = newLines.reduce((s, l) => s + (l.bon || 0) * (l.rate || 0), 0);
+      return { ...p, lines: newLines, subtotal: newSubtotal };
+    }));
+  };
+
   const proposalApprove = (id, { poNr, note, date }) => {
     setProposals(prev => prev.map(p =>
       p.id === id ? { ...p, status: 'approved', poNr, approveNote: note, approveDate: date } : p
@@ -1010,6 +1023,7 @@ export default function App() {
             proposals={proposals}
             onCreate={proposalCreate}
             onSend={proposalSend}
+            onUpdateLine={proposalUpdateLine}
             onApprove={proposalApprove}
             onReject={proposalReject}
             onConvertToInvoice={proposalConvert}

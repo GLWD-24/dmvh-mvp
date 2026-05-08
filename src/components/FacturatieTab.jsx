@@ -21,7 +21,7 @@ const STATUS_STYLES = {
   paid: 'bg-emerald-200 text-emerald-900 border-emerald-400'
 };
 
-export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onSend, onApprove, onReject, onConvertToInvoice, onReopen }) {
+export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate, onSend, onUpdateLine, onApprove, onReject, onConvertToInvoice, onReopen }) {
   const [klant, setKlant] = useState(klanten[0]?.name || '');
   const [period, setPeriod] = useState('April 2026');
   const [previewing, setPreviewing] = useState(null);
@@ -98,6 +98,7 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
                 onPreview={() => setPreviewing(previewing === p.id ? null : p.id)}
                 isPreviewing={previewing === p.id}
                 onSend={() => onSend(p.id)}
+                onUpdateLine={(lineId, patch) => onUpdateLine && onUpdateLine(p.id, lineId, patch)}
                 onOpenApprove={() => setApproveDialog(p)}
                 onOpenReject={() => setRejectDialog(p)}
                 onConvert={() => onConvertToInvoice(p.id)}
@@ -131,7 +132,7 @@ export default function FacturatieTab({ klanten, werkbonnen, proposals, onCreate
   );
 }
 
-function ProposalCard({ proposal, klanten, onPreview, isPreviewing, onSend, onOpenApprove, onOpenReject, onConvert, onReopen, onExportExcel }) {
+function ProposalCard({ proposal, klanten, onPreview, isPreviewing, onSend, onUpdateLine, onOpenApprove, onOpenReject, onConvert, onReopen, onExportExcel }) {
   const klantObj = klanten.find(k => k.name === proposal.klant);
   const isInvoice = proposal.status === 'invoiced' || proposal.status === 'paid';
 
@@ -213,17 +214,29 @@ function ProposalCard({ proposal, klanten, onPreview, isPreviewing, onSend, onOp
         </div>
       </div>
 
-      {isPreviewing && <PdfPreview proposal={proposal} klant={klantObj} />}
+      {isPreviewing && <PdfPreview proposal={proposal} klant={klantObj} onUpdateLine={onUpdateLine} />}
     </div>
   );
 }
 
-function PdfPreview({ proposal, klant }) {
+function PdfPreview({ proposal, klant, onUpdateLine }) {
   const isInvoice = proposal.status === 'invoiced' || proposal.status === 'paid';
   const title = isInvoice ? 'FACTUUR' : 'VOORSTEL TOT FACTURATIE';
   const subtotal = proposal.subtotal;
   const vat = subtotal * 0.21;
   const total = subtotal + vat;
+
+  // Bewerken alleen toegestaan in 'draft' (Concept) status — daarna bevroren.
+  const canEdit = proposal.status === 'draft' && typeof onUpdateLine === 'function';
+
+  // Combineer Machine + Bestuurder. Bij HEMZELF (naakte verhuur) toon enkel machine.
+  const formatMachineWorker = (line) => {
+    const isHemzelf = !line.worker
+      || line.worker === 'HEMZELF'
+      || /hemzelf/i.test(line.worker);
+    if (isHemzelf || !line.worker) return line.machine || '—';
+    return `${line.machine} — ${line.worker}`;
+  };
 
   return (
     <div className="border-t border-slate-200 p-5 bg-white text-xs">
@@ -262,13 +275,18 @@ function PdfPreview({ proposal, klant }) {
         </div>
       )}
 
+      {canEdit && (
+        <div className="text-[10px] text-slate-500 italic mb-1">
+          Uren en tarief zijn bewerkbaar tot het voorstel verzonden is. Klik in de cel om aan te passen.
+        </div>
+      )}
+
       <table className="w-full border-collapse">
         <thead>
           <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase">
             <th className="text-left py-1">Datum</th>
-            <th className="text-left">Bestuurder</th>
             <th className="text-left">Werf</th>
-            <th className="text-left">Machine</th>
+            <th className="text-left">Machine + bestuurder</th>
             <th className="text-right">Uren</th>
             <th className="text-right">Tarief</th>
             <th className="text-right">Bedrag</th>
@@ -278,12 +296,33 @@ function PdfPreview({ proposal, klant }) {
           {proposal.lines.map(l => (
             <tr key={l.id} className="border-b border-slate-100">
               <td className="py-1">{l.date}</td>
-              <td>{l.worker}</td>
               <td className="text-slate-500">{l.werf}</td>
-              <td>{l.machine}</td>
-              <td className="text-right">{(l.bon || 0).toFixed(1)}</td>
-              <td className="text-right">€ {fmtEur(l.rate || 0)}</td>
-              <td className="text-right">€ {fmtEur((l.bon || 0) * (l.rate || 0))}</td>
+              <td>{formatMachineWorker(l)}</td>
+              <td className="text-right">
+                {canEdit ? (
+                  <EditableCell
+                    value={l.bon || 0}
+                    decimals={2}
+                    onChange={(v) => onUpdateLine(l.id, { bon: v })}
+                    suffix=""
+                  />
+                ) : (
+                  (l.bon || 0).toFixed(1)
+                )}
+              </td>
+              <td className="text-right">
+                {canEdit ? (
+                  <EditableCell
+                    value={l.rate || 0}
+                    decimals={2}
+                    onChange={(v) => onUpdateLine(l.id, { rate: v })}
+                    prefix="€ "
+                  />
+                ) : (
+                  <>€ {fmtEur(l.rate || 0)}</>
+                )}
+              </td>
+              <td className="text-right font-medium">€ {fmtEur((l.bon || 0) * (l.rate || 0))}</td>
             </tr>
           ))}
         </tbody>
@@ -301,6 +340,62 @@ function PdfPreview({ proposal, klant }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Inline-editeerbare numerieke cel.
+ * Klik = focus, comma of punt als decimaal-separator, tab/enter/blur = commit.
+ * Ongeldige input → revert naar laatste geldige waarde.
+ */
+function EditableCell({ value, decimals = 2, onChange, prefix = '', suffix = '' }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const startEdit = () => {
+    setDraft(String(value).replace('.', ','));
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const normalized = String(draft).replace(',', '.').trim();
+    const parsed = parseFloat(normalized);
+    if (!isNaN(parsed) && parsed >= 0) {
+      onChange(parsed);
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => setEditing(false);
+
+  if (editing) {
+    return (
+      <input
+        type="text"
+        inputMode="decimal"
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commit(); }
+          else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        }}
+        onFocus={e => e.target.select()}
+        className="w-20 text-right px-1 py-0.5 border border-blue-400 rounded bg-blue-50 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      className="text-right px-1 py-0.5 rounded hover:bg-blue-50 hover:ring-1 hover:ring-blue-300 cursor-text border border-transparent transition"
+      title="Klik om te bewerken"
+    >
+      {prefix}{Number(value).toFixed(decimals).replace('.', ',')}{suffix}
+    </button>
   );
 }
 

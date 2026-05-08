@@ -28,21 +28,22 @@ export function exportProposalToExcel(proposal, klant) {
     [],
   ].filter(Boolean);
 
-  // Line table headers
+  // Line table headers — Bestuurder gefuseerd in de Machine-kolom (HEMZELF = enkel machine)
   const tableHeaderRowIdx = rows.length + 1; // 1-indexed for Excel formulas
-  rows.push(['Datum', 'Bestuurder', 'Werf', 'Machine', 'Uren', 'Tarief (€/u)', 'Bedrag (€)', 'Opmerking']);
+  rows.push(['Datum', 'Werf', 'Machine + bestuurder', 'Uren', 'Tarief (€/u)', 'Bedrag (€)', 'Opmerking']);
 
   const firstDataRow = rows.length + 1;
   proposal.lines.forEach((l, i) => {
     const rowIdx = firstDataRow + i;
+    const isHemzelf = !l.worker || l.worker === 'HEMZELF' || /hemzelf/i.test(l.worker);
+    const machineWorker = isHemzelf ? (l.machine || '') : `${l.machine} — ${l.worker}`;
     rows.push([
       l.date,
-      l.worker,
       l.werf,
-      l.machine,
+      machineWorker,
       fmt(l.bon),
       fmt(l.rate),
-      { f: `E${rowIdx}*F${rowIdx}` }, // live Excel formula
+      { f: `D${rowIdx}*E${rowIdx}` }, // live Excel formula (kolommen verschoven)
       l.nota || ''
     ]);
   });
@@ -51,23 +52,22 @@ export function exportProposalToExcel(proposal, klant) {
   // Totals
   rows.push([]);
   rows.push([
-    '', '', '', 'TOTAAL',
-    { f: `SUM(E${firstDataRow}:E${lastDataRow})` },
+    '', '', 'TOTAAL',
+    { f: `SUM(D${firstDataRow}:D${lastDataRow})` },
     '',
-    { f: `SUM(G${firstDataRow}:G${lastDataRow})` },
+    { f: `SUM(F${firstDataRow}:F${lastDataRow})` },
     ''
   ]);
   const subtotalRow = rows.length;
-  rows.push(['', '', '', 'BTW 21%', '', '', { f: `G${subtotalRow}*0.21` }, '']);
+  rows.push(['', '', 'BTW 21%', '', '', { f: `F${subtotalRow}*0.21` }, '']);
   const vatRow = rows.length;
-  rows.push(['', '', '', 'TOTAAL INCL. BTW', '', '', { f: `G${subtotalRow}+G${vatRow}` }, '']);
+  rows.push(['', '', 'TOTAAL INCL. BTW', '', '', { f: `F${subtotalRow}+F${vatRow}` }, '']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [
     { wch: 12 },  // Datum
-    { wch: 22 },  // Bestuurder
     { wch: 22 },  // Werf
-    { wch: 18 },  // Machine
+    { wch: 32 },  // Machine + bestuurder
     { wch: 8 },   // Uren
     { wch: 12 },  // Tarief
     { wch: 14 },  // Bedrag
